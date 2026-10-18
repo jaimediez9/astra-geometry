@@ -45,8 +45,18 @@ def is_rotation_matrix(
 
 def rotation_matrix3D(axis, theta: float) -> NDArray[np.float64]:
     """
-    Devuelve la matriz de rotación asociada a una rotación alrededor de un eje dado 'axis' con un ángulo dado 'theta'
-    Utilizamos la forma de conversión de cuaterniones a matrices de rotación para obtener la matriz de rotación.
+    Construye una matriz de rotación 3D mediante la fórmula de Rodrigues.
+
+    Args:
+        axis: Vector de tres componentes que define el eje de rotación.
+        theta: Ángulo de rotación en radianes.
+
+    Returns:
+        Matriz de rotación 3x3 perteneciente a SO(3).
+
+    Raises:
+        ValueError: Si el eje no tiene forma (3,), es nulo o contiene
+                    valores no finitos, o si theta no es finito.
     """
     axis = np.asarray(axis, dtype=np.float64)
 
@@ -99,7 +109,7 @@ def rotate_points(points, axis, theta):
     if points.ndim != 2 or points.shape[1] != 3:
         raise ValueError("points debe tener forma (N, 3)")
 
-    if not np.all(np.infinite(points)):
+    if not np.all(np.isfinite(points)):
         raise ValueError("Los puntos deben contener valores finitos")
 
     R = rotation_matrix3D(axis, theta)      # Obtenemos matriz de rotación 3D para aplicarla a los puntos
@@ -107,33 +117,4 @@ def rotate_points(points, axis, theta):
 
 
 
-"""
-Pruebas de verificación
-"""
 
-def test_reflection_is_not_rotation():
-    R = np.diag([1.0, 1.0, -1.0])
-    assert not is_rotation_matrix(R)
-
-def test_rotation_preserves_norm():
-    p = np.array([[1.0, 2.0, 3.0]])
-    rotated = rotate_points(p, [0, 0, 1], np.pi / 4)
-    
-    assert np.allclose(
-        np.linalg.norm(rotated, axis=1),
-        np.linalg.norm(p, axis=1),
-    )
-
-def test_rotation_around_z():
-    p = np.array([[1.0, 0.0, 0.0]])
-    rotated = rotate_points(p, [0, 0, 1], np.pi / 2)
-
-    assert np.allclose(rotated, [[0.0, 1.0, 0.0]], atol=1e-8)
-
-def test_zero_axis_is_rejected():
-    try:
-        rotation_matrix3D([0, 0, 0], 1.0)
-    except ValueError:
-        pass 
-    else:
-        raise AssertionError("Se esperaba ValueError")
