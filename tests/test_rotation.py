@@ -1,5 +1,5 @@
 """
-Pruebas de verificación
+Verification tests
 """
 import numpy as np
 import pytest
@@ -52,7 +52,7 @@ def test_rotation_matrix3d_belongs_to_so3():
 
 
 """
-Matriz identidad y dimensiones incorrectas
+Identity matrix and incorrect dimensions
 """
 
 def test_identity_is_rotation_matrix():
@@ -71,7 +71,7 @@ def test_invalid_matrix_shape_is_rejected(shape):
 
 
 """
-Matrices con valores no finitos
+Matrices with non-finite values
 """
 
 @pytest.mark.parametrize("value", [
@@ -88,7 +88,7 @@ def test_non_finite_matrix_is_rejected(value):
 
 
 """
-Validación del eje y ángulo
+Axis and angle validation
 """
 
 @pytest.mark.parametrize("axis", [
@@ -110,11 +110,11 @@ def test_invalid_axis_is_rejected(axis):
 
 def test_non_finite_angle_is_rejected(theta):
     with pytest.raises(ValueError):
-        assert rotation_matrix3D([0.0, 0.0, 1.0], theta)
+        rotation_matrix3D([0.0, 0.0, 1.0], theta)
 
 
 """
-Rotaciones 2D
+2D Rotations
 """
 
 @pytest.mark.parametrize("theta", [
@@ -135,3 +135,18 @@ def tets_rotation_matrix2d_is_valid(theta):
 def test_rotation_matrix2d_rejects_non_finite_angle():
     with pytest.raise(ValueError):
         rotation_matrix2D(np.nan)
+
+"""
+Points validation
+"""
+
+@pytest.mark.parametrize("points", [
+    np.array([1.0, 2.0, 3.0]),
+    np.zeros((2, 2)),
+    np.array([[np.nan, 0.0, 1.0]]),
+    np.array([[np.inf, 0.0, 1.0]]),
+])
+
+def test_invalid_points_are_rejected(points):
+    with pytest.raises(ValueError):
+        rotate_points(points, [0.0, 0.0, 1.0], 1.0)
