@@ -44,35 +44,53 @@ $$
 
 This is an implementation-level storage convention; it does not change the underlying mathematical convention.
 
-## 3. Rigid Transformations — $\mathrm{SE}(3)$
+## 3. Quaternion Convention
 
-A rigid transformation is represented by:
+Quaternions representing rotations use the Hamilton convention and are stored in scalar-first order:
 
-$$
-T = \begin{bmatrix}
-R & t \\
-0 & 1
-\end{bmatrix}
-$$
-
-where $R \in \mathrm{SO}(3)$ and $t \in \mathbb{R}^3$.
-
-Homogeneous points:
 
 $$
-\tilde{p} = \begin{bmatrix}
-p \\
-1
-\end{bmatrix}
+q=(w,x,y,z)=(w,\mathbf v)
 $$
 
-The transformation acts as:
+
+where $w$ is the scalar component and $\mathbf v=(x,y,z)$ is the vector component.
+
+Unit quaternions represent rotations in three dimensions. The quaternions $q$ and $-q$ represent the same rotation.
+
+For a unit quaternion $q=(w,\mathbf v)$, its inverse is its conjugate:
+
 
 $$
-\tilde{p}' = T\tilde{p}
+q^{-1}=q^*=(w,-\mathbf v)
 $$
 
-## 4. Inverse Transformation
+
+Quaternion multiplication and matrix conversion must be consistent with the rotation composition convention defined in Section 2.
+
+## 4. Rigid Transformations — $\mathrm{SE}(3)$
+
+### 4.1 Coordinate Frame Convention
+
+A rigid transformation $T_{A\leftarrow B}$ maps coordinates expressed in frame $B$ to coordinates expressed in frame $A$:
+
+$$
+\tilde p_A = T_{A\leftarrow B}\tilde p_B
+$$
+
+The transformation is defined by a rotation $R_{A\leftarrow B}$ and a translation $t_{A\leftarrow B}$, both expressed according to the documented frame convention.
+
+For compatible transformations, composition follows right-to-left matrix multiplication:
+
+$$
+T_{A\leftarrow C}
+=
+T_{A\leftarrow B}T_{B\leftarrow C}
+$$
+
+The intermediate frame identifiers must match.
+
+## 5. Inverse Transformation
 
 For a rotation matrix $R\in\mathrm{SO}(3)$:
 
