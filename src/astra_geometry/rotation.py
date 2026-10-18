@@ -188,5 +188,4 @@ def rotate_points(
 """
 def compose_rotations():
 def inverse_rotation():
-
 """"

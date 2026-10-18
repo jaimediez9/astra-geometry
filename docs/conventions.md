@@ -20,8 +20,29 @@ $$
 R^\mathsf{T}R = I_3, \qquad \det(R) = +1
 $$
 
-- Rotation matrices are represented as $3\times3$ matrices.
-- Matrices act on column vectors by left multiplication: $p' = Rp$.
+Rotation matrices are represented as $3\times3$ matrices.
+
+Matrices act on column vectors by left multiplication: $p' = Rp$.
+
+The inverse of a valid rotation matrix is its transpose: $R^{-1}=R^\mathsf{T}$.
+
+The composition $R=R_2R_1$ applies $R_1$ first and $R_2$ second.
+
+Composition is associative but not generally commutative: $R_3(R_2R_1)=(R_3R_2)R_1$, while $R_2R_1\ne R_1R_2$ in general.
+
+The identity matrix $I_3$ represents the identity rotation.
+
+### 2.1 NumPy Array Convention
+
+The mathematical convention uses column vectors. The initial NumPy implementation stores point sets as arrays of shape $(N,3)$, with one point per row.
+
+For a point set $P$, the equivalent operation is:
+
+$$
+P'=PR^\mathsf{T}
+$$
+
+This is an implementation-level storage convention; it does not change the underlying mathematical convention.
 
 ## 3. Rigid Transformations — $\mathrm{SE}(3)$
 
@@ -53,14 +74,32 @@ $$
 
 ## 4. Inverse Transformation
 
-For $T$:
+For a rotation matrix $R\in\mathrm{SO}(3)$:
 
 $$
-T^{-1} = \begin{bmatrix}
-R^\mathsf{T} & -R^\mathsf{T}t \\
+R^{-1}=R^\mathsf{T}
+$$
+
+For a rigid transformation:
+
+$$
+T = \begin{bmatrix}
+R & t \
 0 & 1
 \end{bmatrix}
 $$
+
+its inverse is:
+
+$$
+T^{-1} = \begin{bmatrix}
+R^\mathsf{T} & -R^\mathsf{T}t \
+0 & 1
+\end{bmatrix}
+$$
+
+Implementations must validate the relevant input contract before applying these identities. The transpose shortcut is valid for rotation matrices in $\mathrm{SO}(3)$, not for arbitrary $3\times3$ matrices.
+
 
 ## 6. Camera Geometry
 
@@ -92,12 +131,14 @@ where $\lambda$ is the projective scale.
 
 ## 7. Numerical Precision and Validation
 
-* The default floating-point representation for the initial C++ implementation is `double`.
-* Numerical comparisons must use explicit tolerances appropriate to the operation.
-* Absolute and relative tolerances must be distinguished.
-* Non-finite values must be handled explicitly.
-* Invalid dimensions and degenerate geometric configurations must be rejected or reported according to the API contract.
-* Validation must distinguish exact mathematical properties from approximate floating-point checks.
+- The default floating-point representation for the initial C++ implementation is double.
+- The Python reference implementation uses float64 for numerical geometry operations unless a function explicitly specifies otherwise.
+- Numerical comparisons must use explicit tolerances appropriate to the operation.
+- Absolute and relative tolerances must be distinguished. When a validation function uses only absolute tolerance, its relative tolerance must be zero.
+- The initial rotation-matrix validation tolerance is atol = 1e-8, configurable through the API. This is a default, not a universal error bound.
+- Non-finite values must be handled explicitly.
+- Invalid dimensions and degenerate geometric configurations must be rejected or reported according to the API contract.
+- Validation must distinguish exact mathematical properties from approximate floating-point checks.
 
 ## 8. Testing Requirements
 
@@ -105,13 +146,17 @@ Core operations must be tested against mathematical properties, not solely again
 
 Required properties include:
 
-* Rotation orthogonality and determinant.
-* Preservation of distances under rigid transformations.
-* Composition with the identity transformation.
-* Transformation-inverse consistency.
-* Quaternion normalization and equivalence of $q$ and $-q$.
-* Camera projection and reprojection consistency.
-* Recovery of known rigid transformations from synthetic correspondences.
+- Rotation orthogonality and determinant.
+- Preservation of vector norms and pairwise distances under rotations.
+- Identity rotation and composition with the identity.
+- Composition order and associativity, within numerical tolerance.
+- Rotation-inverse consistency: $RR^\mathsf{T}=R^\mathsf{T}R=I_3$.
+- Preservation of distances under rigid transformations.
+- Transformation-inverse consistency.
+- Quaternion normalization and equivalence of $q$ and $-q$.
+- Camera projection and reprojection consistency.
+- Recovery of known rigid transformations from synthetic correspondences.
+
 
 ## 9. Scope and Guarantees
 
