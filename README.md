@@ -51,9 +51,8 @@ Coordinate frames, transformation direction, vector conventions, and units must 
 
 Operations are validated against their defining properties. For example, a valid rotation matrix must satisfy:
 
-\[
-R^\mathsf{T}R=I,\qquad \det(R)=1
-\]
+
+$$R^\mathsf{T}R=I,\qquad \det(R)=1$$
 
 ### Numerical robustness
 
@@ -88,7 +87,7 @@ ctest --test-dir build --output-on-failure
 
 ## Project roadmap
 
-- [ ] Establish coordinate-frame and transformation conventions.
+- [x] Establish coordinate-frame and transformation conventions.
 - [ ] Implement and test SO(3) operations.
 - [ ] Implement quaternion conversions and operations.
 - [ ] Implement SE(3) transformations.
