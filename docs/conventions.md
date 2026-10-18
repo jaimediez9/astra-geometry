@@ -153,6 +153,7 @@ where $\lambda$ is the projective scale.
 - Non-finite values must be handled explicitly.
 - Invalid dimensions and degenerate geometric configurations must be rejected or reported according to the API contract.
 - Validation must distinguish exact mathematical properties from approximate floating-point checks.
+- NOTE: float64 will be used as default format of reference implementation for numerical operations, but it should not be taken from this that all entries will be transformed into such format, nor that all operations will have exact precision.
 
 ## 8. Testing Requirements
 
