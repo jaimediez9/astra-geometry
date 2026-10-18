@@ -184,8 +184,41 @@ def rotate_points(
     return points @ R.T                     # Aplicammos la matriz de rotación a los puntos
 
 
+def compose_rotations(
+    R1: NDArray[np.float64],
+    R2: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """
+    Compone dos rotaciones 3D. 
+    La rotación R1 se aplica primero y R2 después.
+    Args:
+        R1: Primera matriz de rotación, de forma (3, 3).
+        R2: Segunda matriz de rotación, de forma (3, 3).
+    Returns:
+        ValueError: Si alguna entrada no es una matriz de rotación válida.
+    """
+    if not is_rotation_matrix(R1):
+        raise ValueError("R1 debe ser una matriz de rotación válida")
 
-"""
-def compose_rotations():
-def inverse_rotation():
-""""
+    if not is_rotation_matrix(R2):
+        raise ValueError("R2 debe ser una matriz de rotación válida")
+
+    return R2 @ R1
+
+
+def inverse_rotation(
+    R: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """
+    Calcula la inversa de una matriz de rotación 3D.
+    Args:
+        R: Matriz de rotaciñon válida de forma (3, 3).
+    Returns:
+        Matriz de rotación inversa, de forma (3, 3).
+    Raises:
+        ValueError: Si R no es una matriz de rotación válida.
+    """
+    if not is_rotation_matrix(R):
+        raise ValueError("R debe ser una matriz de rotación válida")
+
+    return R.T.copy()

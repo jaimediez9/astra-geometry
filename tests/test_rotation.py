@@ -9,6 +9,8 @@ from astra_geometry.rotation import(
     rotation_matrix3D,
     rotation_matrix2D,
     rotate_points,
+    compose_rotations,
+    inverse_rotation,
 )
 
 
@@ -225,3 +227,82 @@ def test_rotate_points_preserves_pairwise_distances():
     )
 
     assert np.allclose(rotated_distances, original_distances, atol=1e-8)
+
+
+def test_compose_rotations_belongs_to_so3():
+    R1 = rotation_matrix3D([1.0, 0.0, 0.0], np.pi / 4)
+    R2 = rotation_matrix3D([0.0, 0.0, 1.0], np.pi / 3)
+
+    R = compose_rotations(R1, R2)
+
+    assert is_rotation_matrix(R)
+
+def test_compose_rotations_applies_R1_before_R2():
+    R1 = rotation_matrix3D([0.0, 0.0, 1.0], np.pi / 2)
+    R2 = rotation_matrix3D([1.0, 0.0, 0.0], np.pi / 2)
+    point = np.array([0.0, 1.0, 0.0])
+
+    composed = compose_rotations(R1, R2) @ point 
+    sequential = R2 @ (R1 @ point)
+
+    assert np.allclose(composed, sequential, atol=1e-8)
+
+@pytest.mark.parametrize("invalid", [
+    np.eye(2),
+    np.zeros((3, 3)),
+    np.diag([1.0, 1.0, -1.0]),
+    np.full((3, 3), np.nan),
+])
+def test_compose_rotations_rejects_invalid_R1(invalid):
+    with pytest.raises(ValueError):
+        compose_rotations(invalid, np.eye(3))
+
+@pytest.mark.parametrize("invalid", [
+    np.eye(2),
+    np.zeros((3, 3)),
+    np.diag([1.0, 1.0, -1.0]),
+    np.full((3, 3), np.nan),
+])
+def test_compose_rotations_rejects_invalid_R2(invalid):
+    with pytest.raises(ValueError):
+        compose_rotations(np.eye(3), invalid)
+
+
+def test_inverse_rotation_belongs_to_so3():
+    R = rotation_matrix3D([1.0, 2.0, 3.0], np.pi / 3)
+    R_inv = inverse_rotation(R)
+
+    assert is_rotation_matrix(R_inv)
+
+def test_inverse_rotation_is_transpose():
+    R = rotation_matrix3D([1.0, 2.9, 3.0], np.pi / 3)
+
+    assert np.allclose(inverse_rotation(R), R.T)
+
+def test_inverse_rotation_composes_to_identity():
+    R = rotation_matrix3D([1.0, 2.0, 3.0], np.pi / 3)
+    R_inv = inverse_rotation(R)
+
+    assert np.allclose(R_inv @ R, np.eye(3), atol=1e-8)
+    assert np.allclose(R @ R_inv, np.eye(3), atol=1e-8)
+
+def test_inverse_rotation_recovers_original_points():
+    R = rotation_matrix3D([1.0, 2.0, 3.0], np.pi / 3)
+    points = np.array([
+        [1.0, 0.0, 0.0],
+        [0.0, 2.0, 0.0],
+        [0.0, 0.0, 3.0],
+    ])
+
+    recovered = (points @ R.T) @ inverse_rotation(R).T
+    assert np.allclose(recovered, points, atol=1e-8)
+
+@pytest.mark.parametrize("invalid", [
+    np.eye(2),
+    np.zeros((3, 3)),
+    np.diag([1.0, 1.0, -1.0]),
+    np.full((3, 3), np.nan),
+])
+def test_inverse_rotation_rejects_invalid_matrices(invalid):
+    with pytest.raises(ValueError):
+        inverse_rotation(invalid)
