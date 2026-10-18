@@ -13,14 +13,14 @@
 
 ## 2. Rotation Matrices — SO(3)
 
-A rotation matrix \(R \in SO(3)\) satisfies:
+A rotation matrix $\(R \in SO(3)\)$ satisfies:
 
 $$
 R^\mathsf{T}R = I_3,\qquad \det(R)=+1
 $$
 
-- Rotation matrices are represented as \(3\times3\) matrices.
-- Matrices act on column vectors by left multiplication: \(p' = Rp\).
+- Rotation matrices are represented as $3\times3$ matrices.
+- Matrices act on column vectors by left multiplication: $p' = Rp$.
 - Rotation matrices must preserve Euclidean lengths and orientation.
 - Approximate validity is evaluated using explicit numerical tolerances.
 - Reflections and non-orthogonal matrices are not valid rotations.
@@ -37,7 +37,7 @@ R & t\\
 \end{bmatrix}
 $$
 
-where \(R\in SO(3)\) and \(t\in\mathbb{R}^3\).
+where $R\in SO(3)$ and $t\in\mathbb{R}^3$.
 
 Homogeneous points are represented as:
 
@@ -58,7 +58,7 @@ The translation vector and the point coordinates must use the same length unit.
 
 ## 4. Transformation Direction and Composition
 
-The notation \(T_{A\leftarrow B}\) denotes a transformation that converts coordinates expressed in frame \(B\) into coordinates expressed in frame \(A\).
+The notation $T_{A\leftarrow B}$ denotes a transformation that converts coordinates expressed in frame $B$ into coordinates expressed in frame $A$.
 
 Thus:
 
@@ -95,9 +95,9 @@ $$
 ## 5. Quaternions
 
 - Quaternions use the Hamilton convention.
-- Components are stored in the order \((w,x,y,z)\), with the scalar component first.
+- Components are stored in the order $(w,x,y,z)$, with the scalar component first.
 - Unit quaternions represent rotations.
-- The quaternions \(q\) and \(-q\) represent the same physical rotation.
+- The quaternions $q$ and $-q$ represent the same physical rotation.
 - Composition order must agree with the rotation-matrix convention.
 - Conversion routines must document normalization and numerical edge-case behavior.
 
@@ -106,7 +106,7 @@ $$
 The initial camera model is the pinhole model.
 
 - Camera coordinates use a right-handed frame.
-- The positive \(Z\)-axis is the optical direction.
+- The positive $Z$-axis is the optical direction.
 - The camera intrinsic matrix is:
 
 $$
@@ -119,7 +119,7 @@ f_x & s & c_x\\
 $$
 
 - Camera extrinsics use the same transformation-direction convention defined in Section 4.
-- Projection is defined for points with positive camera-frame depth \(Z_c>0\).
+- Projection is defined for points with positive camera-frame depth $Z_c>0$.
 - Lens distortion is outside the initial pinhole model and must be specified separately if introduced.
 
 For a point expressed in camera coordinates:
@@ -157,7 +157,7 @@ Required properties include:
 - Preservation of distances under rigid transformations.
 - Composition with the identity transformation.
 - Transformation-inverse consistency.
-- Quaternion normalization and equivalence of \(q\) and \(-q\).
+- Quaternion normalization and equivalence of $q$ and $-q$.
 - Camera projection and reprojection consistency.
 - Recovery of known rigid transformations from synthetic correspondences.
 
