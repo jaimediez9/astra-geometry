@@ -88,7 +88,7 @@ ctest --test-dir build --output-on-failure
 ## Project roadmap
 
 - [x] Establish coordinate-frame and transformation conventions.
-- [ ] Implement and test SO(3) operations.
+- [/] Implement and test SO(3) operations.
 - [ ] Implement quaternion conversions and operations.
 - [ ] Implement SE(3) transformations.
 - [ ] Implement pinhole camera projection.
