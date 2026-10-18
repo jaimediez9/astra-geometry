@@ -162,6 +162,13 @@ def test_rotation_matrix3d_rejects_invalid_angles(theta):
     with pytest.raises(ValueError):
         rotation_matrix3D([0.0, 0.0, 1.0], theta)
 
+@pytest.mark.parametrize("axis", [
+    [1.0 + 2.0j, 0.0, 0.0],
+    ["invalid", 0.0, 0.0],
+])
+def test_rotation_matrix3d_rejects_invalid_axes(axis):
+    with pytest.raises(ValueError):
+        rotation_matrix3D(axis, np.pi / 4)
 
 """
 2D Rotations
@@ -184,6 +191,18 @@ def tets_rotation_matrix2d_is_valid(theta):
 def test_rotation_matrix2d_rejects_non_finite_angle():
     with pytest.raises(ValueError):
         rotation_matrix2D(np.nan)
+
+
+@pytest.mark.parametrize("theta", [
+    [1.0, 2.0],
+    np.array([1.0]),
+    1.0 + 2.0j,
+    "invalid",
+])
+def test_rotation_matrix2d_rejects_invalid_angles(theta):
+    with pytest.raises(ValueError):
+        rotation_matrix2D(theta)
+
 
 """
 Points validation
@@ -266,6 +285,27 @@ def test_compose_rotations_rejects_invalid_R1(invalid):
 def test_compose_rotations_rejects_invalid_R2(invalid):
     with pytest.raises(ValueError):
         compose_rotations(np.eye(3), invalid)
+
+def test_compose_rotations_is_associative():
+    R1 = rotation_matrix3D([1.0, 0.0, 0.0], 0.3)
+    R2 = rotation_matrix3D([0.0, 1.0, 0.0], 0.5)
+    R3 = rotation_matrix3D([0.0, 0.0, 1.0], 0.7)
+
+    left = compose_rotations(
+        compose_rotations(R1, R2), R3
+    )
+    right = compose_rotations(
+        R1, compose_rotations(R2, R3)
+    )
+
+    assert np.allclose(left, right, atol=1e-8)
+
+
+def test_inverse_rotation_returns_independent_array():
+    R = rotation_matrix3D([1.0, 2.0, 3.0], 0.7)
+    R_inv = inverse_rotation(R)
+
+    assert not np.shares_memory(R, R_inv)
 
 
 def test_inverse_rotation_belongs_to_so3():

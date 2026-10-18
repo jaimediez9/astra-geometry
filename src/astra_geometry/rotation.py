@@ -17,18 +17,20 @@ import numpy as np
 from numpy.typing import NDArray
 
 
+
+
 def is_rotation_matrix(
     R: NDArray[np.float64],
     atol: float = 1e-8,
-    ) -> bool:
+) -> bool:
     """Comprueba si R representa una matriz de rotación de SO(3).
 
     Args:
-        R: Matriz candidata, de forma (3, 3).
-        atol: Tolerancia absoluta para las comprobaciones numéricas.
+        R: Matriz candidata de forma (3, 3).
+        atol: Tolerancia absoluta no negativa.
 
     Returns:
-        True si R es una matriz de rotación válida; False en caso contrario.
+        True si R satisface las propiedades de SO(3); False en caso contrario.
     """
     try:
         R = np.asarray(R)
@@ -36,7 +38,7 @@ def is_rotation_matrix(
     except (TypeError, ValueError, OverflowError):
         return False
 
-    if(R.shape != (3,3)):
+    if R.shape != (3, 3):
         return False
 
     if np.iscomplexobj(R) or not np.issubdtype(R.dtype, np.number):
@@ -45,20 +47,38 @@ def is_rotation_matrix(
     if not np.isfinite(atol) or atol < 0:
         return False
 
-    if not np.all(np.isfinite(R)):
-        return False
-
     try:
-        R = R.astype(np.float64)
-    except (TypeError, ValueError, OverflowError):
+        with np.errstate(over="ignore", invalid="ignore"):
+            R = R.astype(np.float64)
+
+        if not np.all(np.isfinite(R)):
+            return False
+
+        orthogonal = np.allclose(
+            R.T @ R,
+            np.eye(3),
+            atol=atol,
+            rtol=0.0,
+        )
+
+        if not orthogonal:
+            return False
+
+        determinant = np.linalg.det(R)
+
+        return bool(
+            np.isfinite(determinant)
+            and np.isclose(
+                determinant,
+                1.0,
+                atol=atol,
+                rtol=0.0,
+            )
+        )
+
+    except (TypeError, ValueError, OverflowError, np.linalg.LinAlgError):
         return False
 
-    if not np.allclose(R.T @ R, np.eye(3), atol=atol, rtol=0.0):
-        return False
-
-    return bool(
-        np.isclose(np.linalg.det(R), 1.0, atol=atol, rtol=0.0)
-    )
 
 
 
@@ -94,21 +114,31 @@ def rotation_matrix3D(axis, theta: float) -> NDArray[np.float64]:
 
     if not np.isfinite(theta):
         raise ValueError("theta debe ser un escalar real finito")
-    
 
+    try:
+        axis = np.asarray(axis)
 
-    axis = np.asarray(axis, dtype=np.float64)
+        if np.iscomplexobj(axis):
+            raise ValueError("axis debe contener valores reales")
+
+        axis = axis.astype(np.float64)
+
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(
+            "axis debe ser convertible a un array real float64"
+        ) from exc
 
     if axis.shape != (3,):
         raise ValueError("axis debe tener forma (3,)")
 
-    if not np.all(np.isfinite(axis)) or not np.isfinite(theta):
-        raise ValueError("axis y theta deben contener valores finitos")
+    if not np.all(np.isfinite(axis)):
+        raise ValueError("axis debe contener valores finitos")
 
     scale = np.max(np.abs(axis))
 
     if scale == 0.0:
         raise ValueError("El eje de rotación no puede ser nulo")
+
     axis = axis / scale
     axis = axis / np.linalg.norm(axis)
 
@@ -129,18 +159,39 @@ def rotation_matrix3D(axis, theta: float) -> NDArray[np.float64]:
     )
 
 
-def rotation_matrix2D(theta):
+def rotation_matrix2D(theta: float) -> NDArray[np.float64]:
+    """Construye una matriz de rotación 2D.
+
+    Args:
+        theta: Ángulo de rotación en radianes.
+
+    Returns:
+        Matriz de rotación de forma (2, 2).
+
+    Raises:
+        ValueError: Si theta no es un escalar real finito.
     """
-    Construye una rotación 2D; theta se expresa en radianes
-    """
+    try:
+        theta = np.asarray(theta)
+
+        if theta.shape != () or np.iscomplexobj(theta):
+            raise ValueError("theta debe ser un escalar real")
+
+        theta = float(theta)
+
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError("theta debe ser un escalar real finito") from exc
+
     if not np.isfinite(theta):
-        raise ValueError("theta debe tener un valor finito")
+        raise ValueError("theta debe ser un escalar real finito")
 
     c, s = np.cos(theta), np.sin(theta)
-    
-    return np.array([[c, -s],
-                     [s, c]
+
+    return np.array([
+        [c, -s],
+        [s, c],
     ])
+
 
 def rotate_points(
     points: NDArray[np.float64], 
@@ -188,13 +239,14 @@ def compose_rotations(
     R1: NDArray[np.float64],
     R2: NDArray[np.float64],
 ) -> NDArray[np.float64]:
-    """
-    Compone dos rotaciones 3D. 
+    """Compone dos rotaciones 3D.
     La rotación R1 se aplica primero y R2 después.
     Args:
         R1: Primera matriz de rotación, de forma (3, 3).
         R2: Segunda matriz de rotación, de forma (3, 3).
     Returns:
+        Matriz de rotación compuesta R2 @ R1.
+    Raises:
         ValueError: Si alguna entrada no es una matriz de rotación válida.
     """
     if not is_rotation_matrix(R1):
@@ -209,12 +261,11 @@ def compose_rotations(
 def inverse_rotation(
     R: NDArray[np.float64],
 ) -> NDArray[np.float64]:
-    """
-    Calcula la inversa de una matriz de rotación 3D.
+    """Calcula la inversa de una matriz de rotación 3D.
     Args:
-        R: Matriz de rotaciñon válida de forma (3, 3).
+        R: Matriz de rotación válida de forma (3, 3).
     Returns:
-        Matriz de rotación inversa, de forma (3, 3).
+        Matriz inversa R.T, como array independiente.
     Raises:
         ValueError: Si R no es una matriz de rotación válida.
     """
