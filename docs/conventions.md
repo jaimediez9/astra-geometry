@@ -66,7 +66,7 @@ q^{-1}=q^*=(w,-\mathbf v)
 $$
 
 
-Quaternion multiplication and matrix conversion must be consistent with the rotation composition convention defined in Section 2.
+Quaternion multiplication and matrix conversion must be consistent with the rotation composition convention defined in Section 2. Given $q_1$ and $q_2$, the product $q_2q_1$ represents applying $q_1$ first and $q_2$ second.
 
 ## 4. Rigid Transformations — $\mathrm{SE}(3)$
 
@@ -98,7 +98,7 @@ For a rigid transformation:
 
 $$
 T = \begin{bmatrix}
-R & t \
+R & t \\
 0 & 1
 \end{bmatrix}
 $$
@@ -107,7 +107,7 @@ its inverse is:
 
 $$
 T^{-1} = \begin{bmatrix}
-R^\mathsf{T} & -R^\mathsf{T}t \
+R^\mathsf{T} & -R^\mathsf{T}t \\
 0 & 1
 \end{bmatrix}
 $$
@@ -141,7 +141,7 @@ Z_c
 \end{bmatrix}
 $$
 
-where $\lambda$ is the projective scale.
+Here, $(X_c,Y_c,Z_c)$ are coordinates in the camera frame, $(u,v)$ are image coordinates, and $\lambda$ is the projective scale. For the standard pinhole camera model, $\lambda=Z_c$, assuming the stated intrinsic matrix and $Z_c\ne0$.
 
 ## 7. Numerical Precision and Validation
 
