@@ -82,11 +82,7 @@ The transformation is defined by a rotation $R_{A\leftarrow B}$ and a translatio
 
 For compatible transformations, composition follows right-to-left matrix multiplication:
 
-$$
-T_{A\leftarrow C}
-=
-T_{A\leftarrow B}T_{B\leftarrow C}
-$$
+$$T_{A\leftarrow C}=T_{A\leftarrow B}T_{B\leftarrow C}$$
 
 The intermediate frame identifiers must match.
 
