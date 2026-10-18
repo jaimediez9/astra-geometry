@@ -1,0 +1,49 @@
+# --- Secrets and environment ---
+.env
+.env.*
+!.env.example
+!.env.template
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# --- C++ / CMake ---
+build/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+compile_commands.json
+Makefile
+*.o
+*.obj
+*.a
+*.so
+*.dll
+*.dylib
+*.exe
+*.out
+
+# --- IDEs and editors ---
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- OS ---
+.DS_Store
+Thumbs.db
+
+# --- Generated documentation and reports ---
+site/
+coverage.xml
