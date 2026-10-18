@@ -89,7 +89,7 @@ ctest --test-dir build --output-on-failure
 
 - [x] Establish coordinate-frame and transformation conventions.
 - [x] Implement and test SO(3) operations.
-- [ ] Implement quaternion conversions and operations.
+- [x] Implement quaternion conversions and operations.
 - [ ] Implement SE(3) transformations.
 - [ ] Implement pinhole camera projection.
 - [ ] Implement rigid transformation estimation using SVD.
