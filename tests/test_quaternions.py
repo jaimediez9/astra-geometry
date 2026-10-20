@@ -5,6 +5,7 @@ import pytest
 from astra_geometry.quaternions import (
     is_unit_quaternion,
     normalize_quaternion,
+    quaternion_to_rotation_matrix,
 )
 
 
@@ -68,3 +69,68 @@ def test_normalize_quaternion_handles_large_finite_values():
     assert np.all(np.isfinite(q))
     assert np.isclose(np.linalg.norm(q), 1.0)
 
+
+def test_identity_quaternion():
+    q = np.array([1.0, 0.0, 0.0, 0.0])
+
+    R = quaternion_to_rotation_matrix(q)
+
+    np.testing.assert_allclose(R, np.eye(3), atol = 1e-12)
+    assert R.dtype == np.float64
+
+def test_quarter_turn_about_positive_z():
+    s = np.sqrt(0.5)
+    q = np.array([s, 0.0, 0.0, s])
+
+    R = quaternion_to_rotation_matrix(q)
+
+    expected = np.array([
+        [0.0, -1.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ])
+
+    np.testing.assert_allclose(R, expected, atol = 1e-12)
+
+
+def test_q_and_negative_q_represent_same_rotation():
+    q = np.array([0.5, 0.5, 0.5, 0.5])
+
+    R1 = quaternion_to_rotation_matrix(q)
+    R2 = quaternion_to_rotation_matrix(-q)
+
+    np.testing.assert_allclose(R1, R2, atol=1e-12)
+
+
+def test_output_is_a_valid_rotation_matrix():
+    q = np.array([0.5, 0.5, 0.5, 0.5])
+
+    R = quaternion_to_rotation_matrix(q)
+
+    np.testing.assert_allclose(R.T @ R, np.eye(3), atol=1e-12)
+    assert np.isclose(np.linalg.det(R), 1.0, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    "q",
+    [
+        [0.0, 0.0, 0.0, 0.0],
+        [2.0, 0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0, 0.0, 0.0],
+        [np.nan, 0.0, 0.0, 0.0],
+        [np.inf, 0.0, 0.0, 0.0],
+    ],
+)
+def test_invalid_quaternions_raise_value_error(q):
+    with pytest.raises(ValueError):
+        quaternion_to_rotation_matrix(q)
+
+
+def test_input_is_not_modified():
+    q = np.array([0.5, 0.5, 0.5, 0.5])
+    original = q.copy()
+
+    quaternion_to_rotation_matrix(q)
+
+    np.testing.assert_array_equal(q, original)
