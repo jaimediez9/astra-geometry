@@ -10,10 +10,26 @@ __pycache__/
 .venv/
 venv/
 env/
+
+# Packaging and build artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# Test, typing and lint caches
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.pytype/
+.tox/
+.nox/
+.hypothesis/
+
+# Coverage
 .coverage
+.coverage.*
+coverage.xml
 htmlcov/
 
 # --- C++ / CMake ---
@@ -22,16 +38,53 @@ cmake-build-*/
 CMakeFiles/
 CMakeCache.txt
 cmake_install.cmake
+CTestTestfile.cmake
 compile_commands.json
+# Locally generated Makefiles (CMake output; commit CMakeLists.txt instead)
 Makefile
+# Machine-specific presets; share CMakePresets.json instead
+CMakeUserPresets.json
+
+# Compiled objects and libraries
 *.o
 *.obj
+*.lo
 *.a
+*.lib
 *.so
+*.so.*
 *.dll
 *.dylib
 *.exe
 *.out
+
+# Precompiled headers
+*.gch
+*.pch
+
+# clangd / language-server indexes
+.cache/
+.clangd/
+
+# Native coverage instrumentation
+*.gcda
+*.gcno
+*.gcov
+
+# --- Ada / SPARK (long-term target) ---
+# NOTE: *.gpr, *.adb, *.ads, alire.toml and alire.lock are sources and stay tracked.
+obj/
+lib/
+*.ali
+b~*.ad[bs]
+.gnatprove/
+gnatprove.out
+# Alire local toolchain cache
+alire/
+
+# --- Profiling and timing ---
+perf.data
+perf.data.old
 
 # --- IDEs and editors ---
 .idea/
@@ -46,4 +99,3 @@ Thumbs.db
 
 # --- Generated documentation and reports ---
 site/
-coverage.xml
