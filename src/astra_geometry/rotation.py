@@ -6,7 +6,10 @@ Alcance:
 2. Construcción de matrices de rotación alrededor de X, Y y Z.
 3. Composición de rotaciones.
 4. Aplicación de rotaciones a conjuntos de puntos.
-5. Conversión entre matrices de rotación y cuaterniones.
+
+La conversión entre matrices de rotación y cuaterniones no vive aquí: está
+en quaternions.py, que importa is_rotation_matrix de este módulo. La dirección
+de la dependencia es rotation.py -> quaternions.py, nunca al contrario.
 
 Este módulo constituye una implementación experimental y una referencia
 matemática. La forma de los arrays y las propiedades geométricas deben

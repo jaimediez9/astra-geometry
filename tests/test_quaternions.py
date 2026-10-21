@@ -7,7 +7,6 @@ from astra_geometry.quaternions import (
     normalize_quaternion,
     quaternion_to_rotation_matrix,
     rotation_matrix_to_quaternion,
-    quaternion_to_rotation_matrix,
 )
 
 
