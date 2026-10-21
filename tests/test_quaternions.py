@@ -253,3 +253,52 @@ def test_rotation_matrix_to_quaternion_does_not_modify_input():
     rotation_matrix_to_quaternion(R)
 
     np.testing.assert_array_equal(R, original)
+
+def test_quaternion_rotation_matrix_round_trip():
+    """Converting q -> R -> q' -> R' preserves the rotation."""
+    quaternions = [
+        np.array([1.0, 0.0, 0.0, 0.0]),
+        np.array([np.sqrt(0.5), np.sqrt(0.5), 0.0, 0.0]),
+        np.array([np.sqrt(0.5), 0.0, np.sqrt(0.5), 0.0]),
+        np.array([np.sqrt(0.5), 0.0, 0.0, np.sqrt(0.5)]),
+        np.array([0.5, 0.5, 0.5, 0.5]),
+        np.array([0.0, 1.0, 0.0, 0.0]),
+        np.array([0.0, 0.0, 1.0, 0.0]),
+        np.array([0.0, 0.0, 0.0, 1.0]),
+    ]
+
+    for q in quaternions:
+        R = quaternion_to_rotation_matrix(q)
+        q_result = rotation_matrix_to_quaternion(R)
+        R_result = quaternion_to_rotation_matrix(q_result)
+
+        np.testing.assert_allclose(
+            R_result,
+            R,
+            atol=1e-8,
+            rtol=0.0,
+        )
+
+def test_quaternion_rotation_matrix_round_trip_sign_equivalence():
+    """Opposite quaternion signs represent the same rotation."""
+    q = np.array([0.5, 0.5, 0.5, 0.5])
+
+    R_positive = quaternion_to_rotation_matrix(q)
+    R_negative = quaternion_to_rotation_matrix(-q)
+
+    np.testing.assert_allclose(
+        R_negative,
+        R_positive,
+        atol=1e-8,
+        rtol=0.0,
+    )
+
+    q_result = rotation_matrix_to_quaternion(R_negative)
+    R_result = quaternion_to_rotation_matrix(q_result)
+
+    np.testing.assert_allclose(
+        R_result,
+        R_positive,
+        atol=1e-8,
+        rtol=0.0,
+    )
