@@ -6,6 +6,8 @@ from astra_geometry.quaternions import (
     is_unit_quaternion,
     normalize_quaternion,
     quaternion_to_rotation_matrix,
+    rotation_matrix_to_quaternion,
+    quaternion_to_rotation_matrix,
 )
 
 
@@ -134,3 +136,120 @@ def test_input_is_not_modified():
     quaternion_to_rotation_matrix(q)
 
     np.testing.assert_array_equal(q, original)
+
+
+# Tests for rotation_matrix_to_quaternion
+
+def test_rotation_matrix_to_quaternion_identity():
+    q = rotation_matrix_to_quaternion(np.eye(3))
+
+    np.testing.assert_allclose(
+        q, [1.0, 0.0, 0.0, 0.0], atol=1e-12
+    )
+    assert q.shape == (4,)
+    assert q.dtype == np.float64
+    assert np.isclose(np.linalg.norm(q), 1.0, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    ("R", "expected"),
+    [
+        (
+            np.diag([1.0, -1.0, -1.0]),
+            [0.0, 1.0, 0.0, 0.0],
+        ),
+        (
+            np.diag([-1.0, 1.0, -1.0]),
+            [0.0, 0.0, 1.0, 0.0],
+        ),
+        (
+            np.diag([-1.0, -1.0, 1.0]),
+            [0.0, 0.0, 0.0, 1.0],
+        ),
+    ],
+)
+def test_rotation_matrix_to_quaternion_half_turns(R, expected):
+    q = rotation_matrix_to_quaternion(R)
+
+    np.testing.assert_allclose(q, expected, atol=1e-12)
+    assert np.isclose(np.linalg.norm(q), 1.0, atol=1e-12)
+
+
+def test_rotation_matrix_to_quaternion_quarter_turn_about_z():
+    R = np.array([
+        [0.0, -1.0, 0.0],
+        [1.0,  0.0, 0.0],
+        [0.0,  0.0, 1.0],
+    ])
+
+    s = np.sqrt(0.5)
+    expected = [s, 0.0, 0.0, s]
+
+    q = rotation_matrix_to_quaternion(R)
+
+    np.testing.assert_allclose(q, expected, atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    "angle",
+    [
+        np.pi - 1e-7,
+        np.pi,
+        np.pi + 1e-7,
+    ],
+)
+def test_rotation_matrix_to_quaternion_near_half_turn(angle):
+    c = np.cos(angle)
+    s = np.sin(angle)
+
+    R = np.array([
+        [c, -s, 0.0],
+        [s,  c, 0.0],
+        [0.0, 0.0, 1.0],
+    ])
+
+    q = rotation_matrix_to_quaternion(R)
+
+    assert np.all(np.isfinite(q))
+    assert np.isclose(np.linalg.norm(q), 1.0, atol=1e-12)
+    assert q[0] >= 0.0
+
+
+@pytest.mark.parametrize(
+    "R",
+    [
+        np.zeros((3, 3)),
+        np.diag([1.0, 1.0, -1.0]),  # Reflection: det = -1
+        np.diag([2.0, 1.0, 1.0]),   # Non-orthogonal
+        np.eye(2),
+        np.eye(4),
+        np.full((3, 3), np.nan),
+        np.full((3, 3), np.inf),
+        np.eye(3, dtype=complex) + 1j,
+    ],
+)
+def test_rotation_matrix_to_quaternion_rejects_invalid_matrices(R):
+    with pytest.raises(ValueError):
+        rotation_matrix_to_quaternion(R)
+
+
+@pytest.mark.parametrize(
+    "atol",
+    [-1.0, np.nan, np.inf, -np.inf],
+)
+def test_rotation_matrix_to_quaternion_rejects_invalid_tolerance(atol):
+    with pytest.raises(ValueError):
+        rotation_matrix_to_quaternion(np.eye(3), atol=atol)
+
+
+def test_rotation_matrix_to_quaternion_does_not_modify_input():
+    R = np.array([
+        [0.0, -1.0, 0.0],
+        [1.0,  0.0, 0.0],
+        [0.0,  0.0, 1.0],
+    ])
+    original = R.copy()
+
+    rotation_matrix_to_quaternion(R)
+
+    np.testing.assert_array_equal(R, original)
