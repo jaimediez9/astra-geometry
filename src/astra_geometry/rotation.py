@@ -20,8 +20,6 @@ import numpy as np
 from numpy.typing import NDArray
 
 
-
-
 def is_rotation_matrix(
     R: NDArray[np.float64],
     atol: float = 1e-8,
