@@ -66,7 +66,15 @@ q^{-1}=q^*=(w,-\mathbf v)
 $$
 
 
+For a general (non-unit) quaternion the inverse is $q^{-1}=q^*/\lVert q\rVert^2$. The conjugate alone is an inverse only in the unit case.
+
 Quaternion multiplication and matrix conversion must be consistent with the rotation composition convention defined in Section 2. Given $q_1$ and $q_2$, the product $q_2q_1$ represents applying $q_1$ first and $q_2$ second.
+
+### 3.1 API conventions
+
+- **Composition order.** The multiplication entry point mirrors `compose_rotations`: the first argument is the rotation applied first, so `quaternion_multiply(q1, q2)` returns $q_2q_1$, whose rotation matrix is $R_2R_1$. The product is not commutative and argument order is part of the contract.
+- **Unit-norm requirement.** Multiplication and conjugation are algebraic operations: they require shape $(4,)$, real and finite components, but not unit norm. The product of two unit quaternions is unit, and $\lVert q_2q_1\rVert=\lVert q_2\rVert\lVert q_1\rVert$ in general. The conversion functions, which represent rotations, do require unit norm validated with a configurable absolute tolerance.
+- **Conversion output representative.** Converting a rotation matrix to a quaternion returns the representative with $w\ge 0$ whenever the rotation allows it. For an exact half turn ($w=0$) both $q$ and $-q$ are equally valid and the rule cannot choose: the returned sign is an implementation detail and must not be relied upon. Sign stability in the neighbourhood of $w=0$ is not guaranteed. The rotation matrix produced by $q\to R$ does not depend on the sign of $q$.
 
 ## 4. Rigid Transformations — $\mathrm{SE}(3)$
 
@@ -169,6 +177,7 @@ Required properties include:
 - Preservation of distances under rigid transformations.
 - Transformation-inverse consistency.
 - Quaternion normalization and equivalence of $q$ and $-q$.
+- Quaternion composition consistent with matrix composition, including argument order.
 - Camera projection and reprojection consistency.
 - Recovery of known rigid transformations from synthetic correspondences.
 
