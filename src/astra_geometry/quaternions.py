@@ -81,6 +81,122 @@ def normalize_quaternion(q: ArrayLike) -> NDArray[np.float64]:
     return q / np.linalg.norm(q)
 
 
+def _as_quaternion(q: ArrayLike, nombre: str) -> NDArray[np.float64]:
+    """Convierte q en un array float64 de forma (4,) validado.
+
+    No comprueba la norma: se usa en operaciones algebraicas, que no exigen
+    cuaterniones unitarios. Es la semilla de la validación compartida que se
+    trasladará a _validation.py una vez cerrado el álgebra de cuaterniones.
+
+    Args:
+        q: Entrada candidata a cuaternión.
+        nombre: Nombre del argumento, para el mensaje de error.
+
+    Returns:
+        Cuaternión float64 de forma (4,).
+
+    Raises:
+        ValueError: Si q no es un vector real finito de forma (4,).
+    """
+    try:
+        q = np.asarray(q)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            f"{nombre} debe ser convertible a un array real float64"
+        ) from exc
+
+    if np.iscomplexobj(q):
+        raise ValueError(f"{nombre} debe contener valores reales")
+
+    try:
+        q = q.astype(np.float64, copy=False)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(
+            f"{nombre} debe ser convertible a un array real float64"
+        ) from exc
+
+    if q.shape != (4,):
+        raise ValueError(f"{nombre} debe tener forma (4,)")
+
+    if not np.all(np.isfinite(q)):
+        raise ValueError(f"{nombre} debe contener valores finitos")
+
+    return q
+
+
+def _hamilton_product(
+    left: NDArray[np.float64],
+    right: NDArray[np.float64],
+) -> NDArray[np.float64]:
+    """Producto de Hamilton left * right, con operandos ya validados."""
+    wl, xl, yl, zl = left
+    wr, xr, yr, zr = right
+
+    return np.array([
+        wl * wr - xl * xr - yl * yr - zl * zr,
+        wl * xr + xl * wr + yl * zr - zl * yr,
+        wl * yr - xl * zr + yl * wr + zl * xr,
+        wl * zr + xl * yr - yl * xr + zl * wr,
+    ], dtype=np.float64)
+
+
+def conjugate_quaternion(q: ArrayLike) -> NDArray[np.float64]:
+    """Devuelve el conjugado de un cuaternión.
+
+    El conjugado de q = (w, x, y, z) es q* = (w, -x, -y, -z). Para un
+    cuaternión unitario, el conjugado es su inverso (docs/conventions.md,
+    sección 3). Para un cuaternión general el inverso es q* / |q|^2, que no
+    se calcula aquí.
+
+    No se exige norma unitaria: la conjugación es una operación algebraica.
+    El resultado es unitario si la entrada lo es.
+
+    Args:
+        q: Cuaternión de forma (4,), en orden (w, x, y, z).
+
+    Returns:
+        Cuaternión conjugado float64 de forma (4,).
+
+    Raises:
+        ValueError: Si q no es un vector real finito de forma (4,).
+    """
+    q = _as_quaternion(q, "q")
+
+    return np.array([q[0], -q[1], -q[2], -q[3]], dtype=np.float64)
+
+
+def quaternion_multiply(
+    q1: ArrayLike,
+    q2: ArrayLike,
+) -> NDArray[np.float64]:
+    """Compone dos cuaterniones mediante el producto de Hamilton.
+
+    El orden de los argumentos sigue el de compose_rotations: q1 se aplica
+    primero y q2 después, de modo que el producto devuelto es q2 * q1 y su
+    rotación asociada es R2 @ R1 (docs/conventions.md, sección 3). El orden
+    importa: el producto no es conmutativo.
+
+    No se exige norma unitaria: es una operación algebraica, y en general
+    |q2 * q1| = |q2| · |q1|. Si ambos operandos son unitarios, el resultado
+    también lo es.
+
+    Args:
+        q1: Cuaternión aplicado primero, de forma (4,), en orden (w, x, y, z).
+        q2: Cuaternión aplicado después, de forma (4,), en orden (w, x, y, z).
+
+    Returns:
+        Cuaternión float64 de forma (4,) que representa q2 * q1.
+
+    Raises:
+        ValueError: Si algún operando no es un vector real finito de
+            forma (4,).
+    """
+    q1 = _as_quaternion(q1, "q1")
+    q2 = _as_quaternion(q2, "q2")
+
+    return _hamilton_product(q2, q1)
+
+
 def rotation_matrix_to_quaternion(
     R: ArrayLike,
     atol: float = 1e-8,

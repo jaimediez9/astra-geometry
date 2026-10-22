@@ -3,8 +3,10 @@ import numpy as np
 import pytest
 
 from astra_geometry.quaternions import (
+    conjugate_quaternion,
     is_unit_quaternion,
     normalize_quaternion,
+    quaternion_multiply,
     quaternion_to_rotation_matrix,
     rotation_matrix_to_quaternion,
 )
@@ -426,3 +428,253 @@ def test_quaternion_to_rotation_matrix_rejects_invalid_tolerance(atol):
             np.array([1.0, 0.0, 0.0, 0.0]),
             atol=atol,
         )
+
+
+# Tests for conjugate_quaternion
+
+def test_conjugate_quaternion_negates_the_vector_part():
+    q = np.array([0.5, 0.5, 0.5, 0.5])
+
+    q_conjugate = conjugate_quaternion(q)
+
+    np.testing.assert_allclose(q_conjugate, [0.5, -0.5, -0.5, -0.5], atol=1e-15)
+    assert q_conjugate.shape == (4,)
+    assert q_conjugate.dtype == np.float64
+
+
+def test_conjugate_quaternion_does_not_modify_input():
+    q = np.array([0.5, 0.5, 0.5, 0.5])
+    original = q.copy()
+
+    conjugate_quaternion(q)
+
+    np.testing.assert_array_equal(q, original)
+
+
+def test_conjugate_quaternion_is_the_inverse_for_unit_inputs():
+    """docs/conventions.md, section 3: for a unit quaternion q^-1 = q*."""
+    rng = np.random.default_rng(20261023)
+    identity = np.array([1.0, 0.0, 0.0, 0.0])
+
+    for _ in range(64):
+        q = rng.normal(size=4)
+        q = q / np.linalg.norm(q)
+
+        product = quaternion_multiply(q, conjugate_quaternion(q))
+
+        np.testing.assert_allclose(product, identity, atol=1e-12)
+
+
+def test_conjugate_quaternion_general_case_gives_norm_squared_identity():
+    """For a non-unit q, q* * q = q * q* = |q|^2, which is what makes the
+    general inverse q* / |q|^2 later on."""
+    q = np.array([2.0, -3.0, 0.5, 1.0])
+
+    product = quaternion_multiply(q, conjugate_quaternion(q))
+
+    np.testing.assert_allclose(product, [np.dot(q, q), 0.0, 0.0, 0.0], atol=1e-12)
+
+
+@pytest.mark.parametrize(
+    "q",
+    [
+        [1.0, 2.0, 3.0],
+        [1.0, 0.0, 0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0, np.nan],
+        [1.0, 0.0, 0.0, np.inf],
+        [1.0 + 0.0j, 0.0, 0.0, 0.0],
+        ["no", "numerico", 0.0, 0.0],
+        np.zeros((2, 2)),
+    ],
+)
+def test_conjugate_quaternion_rejects_invalid_inputs(q):
+    with pytest.raises(ValueError):
+        conjugate_quaternion(q)
+
+
+# Tests for quaternion_multiply
+
+def test_quaternion_multiply_by_the_identity():
+    identity = np.array([1.0, 0.0, 0.0, 0.0])
+    q = np.array([0.5, 0.5, 0.5, 0.5])
+
+    np.testing.assert_allclose(quaternion_multiply(q, identity), q, atol=1e-15)
+    np.testing.assert_allclose(quaternion_multiply(identity, q), q, atol=1e-15)
+
+
+def test_two_quarter_turns_about_z_compose_to_a_half_turn():
+    """Hand-computable case: q * q with q = (sqrt(.5), 0, 0, sqrt(.5))."""
+    s = np.sqrt(0.5)
+    q = np.array([s, 0.0, 0.0, s])
+
+    q_composed = quaternion_multiply(q, q)
+
+    np.testing.assert_allclose(q_composed, [0.0, 0.0, 0.0, 1.0], atol=1e-12)
+    np.testing.assert_allclose(
+        quaternion_to_rotation_matrix(q_composed),
+        np.diag([-1.0, -1.0, 1.0]),
+        atol=1e-12,
+    )
+
+
+def test_quaternion_multiply_agrees_with_matrix_composition_order():
+    """The decisive property: composing quaternions must equal composing the
+    rotations, including which one is applied first.
+
+    The matrices are built with the independent Rodrigues helper, so this
+    checks the product formula and the argument order, not the conversion.
+    """
+    rng = np.random.default_rng(20261024)
+
+    for _ in range(128):
+        axis1 = rng.normal(size=3)
+        axis1 = axis1 / np.linalg.norm(axis1)
+        angle1 = rng.uniform(-np.pi, np.pi)
+
+        axis2 = rng.normal(size=3)
+        axis2 = axis2 / np.linalg.norm(axis2)
+        angle2 = rng.uniform(-np.pi, np.pi)
+
+        q1 = np.concatenate(([np.cos(angle1 / 2)], np.sin(angle1 / 2) * axis1))
+        q2 = np.concatenate(([np.cos(angle2 / 2)], np.sin(angle2 / 2) * axis2))
+
+        R1 = _rotation_matrix_about(axis1, angle1)
+        R2 = _rotation_matrix_about(axis2, angle2)
+
+        R_composed = quaternion_to_rotation_matrix(
+            quaternion_multiply(q1, q2)
+        )
+
+        np.testing.assert_allclose(R_composed, R2 @ R1, atol=1e-12, rtol=0.0)
+
+        # Conjugation reverses the order of a product: (q2 q1)* = q1* q2*.
+        np.testing.assert_allclose(
+            conjugate_quaternion(quaternion_multiply(q1, q2)),
+            quaternion_multiply(
+                conjugate_quaternion(q2),
+                conjugate_quaternion(q1),
+            ),
+            atol=1e-12,
+        )
+
+
+def test_quaternion_multiply_is_not_commutative():
+    s = np.sqrt(0.5)
+    q_z = np.array([s, 0.0, 0.0, s])   # quarter turn about z
+    q_x = np.array([s, s, 0.0, 0.0])   # quarter turn about x
+
+    p_zx = quaternion_multiply(q_z, q_x)
+    p_xz = quaternion_multiply(q_x, q_z)
+
+    assert not np.allclose(p_zx, p_xz, atol=1e-9)
+
+    np.testing.assert_allclose(
+        quaternion_to_rotation_matrix(p_zx),
+        _rotation_matrix_about([1.0, 0.0, 0.0], np.pi / 2)
+        @ _rotation_matrix_about([0.0, 0.0, 1.0], np.pi / 2),
+        atol=1e-12,
+    )
+
+
+def test_quaternion_multiply_preserves_norm_up_to_product_of_norms():
+    rng = np.random.default_rng(20261025)
+
+    for _ in range(64):
+        q1 = rng.normal(size=4)
+        q2 = rng.normal(size=4)
+
+        product = quaternion_multiply(q1, q2)
+
+        assert np.isclose(
+            np.linalg.norm(product),
+            np.linalg.norm(q1) * np.linalg.norm(q2),
+            atol=1e-12,
+        )
+
+
+def test_quaternion_multiply_is_associative():
+    rng = np.random.default_rng(20261026)
+
+    for _ in range(64):
+        q1 = rng.normal(size=4)
+        q1 = q1 / np.linalg.norm(q1)
+        q2 = rng.normal(size=4)
+        q2 = q2 / np.linalg.norm(q2)
+        q3 = rng.normal(size=4)
+        q3 = q3 / np.linalg.norm(q3)
+
+        left = quaternion_multiply(quaternion_multiply(q1, q2), q3)
+        right = quaternion_multiply(q1, quaternion_multiply(q2, q3))
+
+        np.testing.assert_allclose(left, right, atol=1e-12)
+
+
+def test_quaternion_multiply_sign_equivalence():
+    """q and -q are the same rotation, so flipping either factor flips the
+    sign of the product but must not change the composed rotation."""
+    rng = np.random.default_rng(20261027)
+
+    for _ in range(32):
+        q1 = rng.normal(size=4)
+        q1 = q1 / np.linalg.norm(q1)
+        q2 = rng.normal(size=4)
+        q2 = q2 / np.linalg.norm(q2)
+
+        product = quaternion_multiply(q1, q2)
+
+        np.testing.assert_allclose(
+            quaternion_multiply(-q1, q2),
+            -product,
+            atol=1e-12,
+        )
+        np.testing.assert_allclose(
+            quaternion_to_rotation_matrix(quaternion_multiply(-q1, q2)),
+            quaternion_to_rotation_matrix(product),
+            atol=1e-12,
+        )
+
+
+def test_quaternion_multiply_accepts_non_unit_inputs():
+    """Documented contract: multiplication is algebraic, so unit norm is not
+    required; only the shape, realness and finiteness are validated."""
+    np.testing.assert_allclose(
+        quaternion_multiply([2.0, 0.0, 0.0, 0.0], [3.0, 0.0, 0.0, 0.0]),
+        [6.0, 0.0, 0.0, 0.0],
+        atol=1e-15,
+    )
+
+
+def test_quaternion_multiply_returns_float64():
+    product = quaternion_multiply([1, 0, 0, 0], (0.0, 1.0, 0.0, 0.0))
+
+    assert product.shape == (4,)
+    assert product.dtype == np.float64
+
+
+def test_quaternion_multiply_does_not_modify_inputs():
+    q1 = np.array([0.5, 0.5, 0.5, 0.5])
+    q2 = np.array([0.5, -0.5, 0.5, -0.5])
+    original1 = q1.copy()
+    original2 = q2.copy()
+
+    quaternion_multiply(q1, q2)
+
+    np.testing.assert_array_equal(q1, original1)
+    np.testing.assert_array_equal(q2, original2)
+
+
+@pytest.mark.parametrize(
+    "q1, q2",
+    [
+        ([1.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0]),
+        ([1.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
+        ([1.0, 0.0, 0.0, np.nan], [1.0, 0.0, 0.0, 0.0]),
+        ([1.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, np.inf]),
+        ([1.0 + 0.0j, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
+        (["no", "numerico", 0.0, 0.0], [1.0, 0.0, 0.0, 0.0]),
+        (np.zeros((4, 1)), [1.0, 0.0, 0.0, 0.0]),
+    ],
+)
+def test_quaternion_multiply_rejects_invalid_inputs(q1, q2):
+    with pytest.raises(ValueError):
+        quaternion_multiply(q1, q2)
