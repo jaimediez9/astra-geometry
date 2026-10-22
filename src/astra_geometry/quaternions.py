@@ -98,6 +98,13 @@ def rotation_matrix_to_quaternion(
         Cuaternión unitario float64 de forma (4,), en orden (w, x, y, z).
         Se elige el representante con w >= 0 cuando sea posible.
 
+    Notas:
+        Para rotaciones de media vuelta exacta (w == 0) los representantes q
+        y -q son igualmente válidos y la regla w >= 0 no puede decidir entre
+        ellos: el signo queda determinado por la rama de extracción
+        seleccionada. No debe asumirse estabilidad del signo en las
+        proximidades de ese caso; la rotación reconstruida sí es estable.
+
     Raises:
         ValueError: Si la matriz no representa una rotación válida.
     """
@@ -179,6 +186,8 @@ def quaternion_to_rotation_matrix(
     El cuaternión usa el orden escalar-primero (w, x, y, z).
     La matriz resultante representa una rotación activa aplicada a
     vectores columna.
+    Los cuaterniones q y -q producen la misma matriz, ya que representan
+    la misma rotación (docs/conventions.md, sección 3).
 
     Args:
         q: Cuaternión unitario de forma (4,), en orden (w, x, y, z).

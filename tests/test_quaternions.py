@@ -10,6 +10,25 @@ from astra_geometry.quaternions import (
 )
 
 
+def _rotation_matrix_about(axis, theta):
+    """Rodrigues rotation matrix, built independently of the library code.
+
+    Used only to generate test inputs, so that the conversion under test is
+    never fed a matrix produced by the conversion itself.
+    """
+    axis = np.asarray(axis, dtype=np.float64)
+    axis = axis / np.linalg.norm(axis)
+
+    x, y, z = axis
+    K = np.array([
+        [0.0, -z, y],
+        [z, 0.0, -x],
+        [-y, x, 0.0],
+    ])
+
+    return np.eye(3) + np.sin(theta) * K + (1.0 - np.cos(theta)) * (K @ K)
+
+
 @pytest.mark.parametrize(
     "q",
     [
@@ -190,28 +209,38 @@ def test_rotation_matrix_to_quaternion_quarter_turn_about_z():
 
 
 @pytest.mark.parametrize(
+    "axis",
+    [
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [0.0, 0.0, 1.0],
+        [1.0, 1.0, 1.0],
+    ],
+)
+@pytest.mark.parametrize(
     "angle",
     [
         np.pi - 1e-7,
         np.pi,
         np.pi + 1e-7,
+        np.pi - 1e-12,
     ],
 )
-def test_rotation_matrix_to_quaternion_near_half_turn(angle):
-    c = np.cos(angle)
-    s = np.sin(angle)
-
-    R = np.array([
-        [c, -s, 0.0],
-        [s,  c, 0.0],
-        [0.0, 0.0, 1.0],
-    ])
+def test_rotation_matrix_to_quaternion_near_half_turn(axis, angle):
+    R = _rotation_matrix_about(axis, angle)
 
     q = rotation_matrix_to_quaternion(R)
 
     assert np.all(np.isfinite(q))
     assert np.isclose(np.linalg.norm(q), 1.0, atol=1e-12)
     assert q[0] >= 0.0
+
+    np.testing.assert_allclose(
+        quaternion_to_rotation_matrix(q),
+        R,
+        atol=1e-8,
+        rtol=0.0,
+    )
 
 
 @pytest.mark.parametrize(
@@ -301,3 +330,99 @@ def test_quaternion_rotation_matrix_round_trip_sign_equivalence():
         atol=1e-8,
         rtol=0.0,
     )
+
+
+def test_rotation_matrix_to_quaternion_half_turn_equal_diagonal_entries():
+    """pi about (1,1,1)/sqrt(3): the three diagonal entries are equal, so the
+    branch selection is an exact tie and no branch wins on the diagonal test."""
+    R = _rotation_matrix_about([1.0, 1.0, 1.0], np.pi)
+
+    # Documents the tie: all three diagonal entries are identical.
+    np.testing.assert_allclose(np.diag(R), [-1.0 / 3.0] * 3, atol=1e-12)
+
+    q = rotation_matrix_to_quaternion(R)
+
+    s = 1.0 / np.sqrt(3.0)
+    np.testing.assert_allclose(q, [0.0, s, s, s], atol=1e-12)
+    np.testing.assert_allclose(
+        quaternion_to_rotation_matrix(q),
+        R,
+        atol=1e-12,
+    )
+
+
+def test_quaternion_matrix_round_trip_recovers_q_up_to_sign():
+    """R -> q -> R is not enough: the quaternion itself must come back, up to
+    the global sign that q and -q share (docs/conventions.md, section 3).
+    """
+    rng = np.random.default_rng(20261022)
+
+    for _ in range(256):
+        q = rng.normal(size=4)
+        q = q / np.linalg.norm(q)
+
+        q_result = rotation_matrix_to_quaternion(
+            quaternion_to_rotation_matrix(q)
+        )
+
+        assert np.isclose(np.linalg.norm(q_result), 1.0, atol=1e-12)
+        assert min(
+            np.max(np.abs(q_result - q)),
+            np.max(np.abs(q_result + q)),
+        ) < 1e-9
+
+
+@pytest.mark.parametrize(
+    "q",
+    [
+        np.array([-1.0, 0.0, 0.0, 0.0]),
+        np.array([-0.5, 0.5, 0.5, 0.5]),
+        np.array([-np.sqrt(0.5), 0.0, 0.0, np.sqrt(0.5)]),
+    ],
+)
+def test_negative_w_quaternion_returns_positive_w_representative(q):
+    """The w >= 0 rule is part of the documented output policy."""
+    q_result = rotation_matrix_to_quaternion(
+        quaternion_to_rotation_matrix(q)
+    )
+
+    np.testing.assert_allclose(q_result, -q, atol=1e-9)
+    assert q_result[0] > 0.0
+
+
+def test_half_turn_sign_is_unconstrained_when_w_is_zero():
+    """At w == 0 both representatives are equally valid, so the w >= 0 rule
+    cannot choose one and the sign is whatever the extraction branch yields.
+    Either sign must still rebuild the same rotation."""
+    R = np.diag([-1.0, -1.0, 1.0])  # pi about z
+
+    q = rotation_matrix_to_quaternion(R)
+
+    np.testing.assert_allclose(q, [0.0, 0.0, 0.0, 1.0], atol=1e-12)
+    assert q[0] == 0.0
+    np.testing.assert_allclose(
+        quaternion_to_rotation_matrix(-q),
+        R,
+        atol=1e-12,
+    )
+
+
+@pytest.mark.parametrize(
+    "atol",
+    [
+        -1.0,
+        np.nan,
+        np.inf,
+        -np.inf,
+        None,
+        1j,
+        "no-numerico",
+        [1e-8],
+    ],
+)
+def test_quaternion_to_rotation_matrix_rejects_invalid_tolerance(atol):
+    with pytest.raises(ValueError):
+        quaternion_to_rotation_matrix(
+            np.array([1.0, 0.0, 0.0, 0.0]),
+            atol=atol,
+        )
