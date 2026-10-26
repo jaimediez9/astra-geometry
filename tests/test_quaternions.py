@@ -10,25 +10,7 @@ from astra_geometry.quaternions import (
     quaternion_to_rotation_matrix,
     rotation_matrix_to_quaternion,
 )
-
-
-def _rotation_matrix_about(axis, theta):
-    """Rodrigues rotation matrix, built independently of the library code.
-
-    Used only to generate test inputs, so that the conversion under test is
-    never fed a matrix produced by the conversion itself.
-    """
-    axis = np.asarray(axis, dtype=np.float64)
-    axis = axis / np.linalg.norm(axis)
-
-    x, y, z = axis
-    K = np.array([
-        [0.0, -z, y],
-        [z, 0.0, -x],
-        [-y, x, 0.0],
-    ])
-
-    return np.eye(3) + np.sin(theta) * K + (1.0 - np.cos(theta)) * (K @ K)
+from _helpers import rotation_matrix_about as _rotation_matrix_about
 
 
 @pytest.mark.parametrize(
