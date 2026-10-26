@@ -19,8 +19,8 @@ La última fila [0, 0, 0, 1] pertenece a la estructura de la representación y
 no al bloque de rotación aproximado: se exige exacta, sin tolerancia. atol se
 aplica únicamente al bloque de rotación.
 
-Estado: bloques 1-3 implementados (validación, constructores y accesores).
-Composición, inversión y aplicación a puntos, pendientes.
+Estado: implementado (validación, constructores, accesores, composición,
+inversión y aplicación a puntos).
 
 Este módulo importa rotation.py y nunca al contrario.
 """
@@ -165,10 +165,20 @@ def compose_transforms(
     primero y T2 después, de modo que se devuelve T2 @ T1, equivalente a
     T_{A<-C} = T_{A<-B} T_{B<-C} (docs/conventions.md, sección 4.1).
 
+    Las entradas se validan antes de componer y el resultado no se revalida.
+    La composición matemática de dos elementos de SE(3) pertenece a SE(3),
+    pero en coma flotante la ortogonalidad puede desviarse por redondeo
+    acumulado: no debe asumirse que un resultado encadenado siga satisfaciendo
+    is_transformation_matrix con la misma tolerancia de forma indefinida. La
+    última fila sí se conserva exacta, porque las entradas la tienen exacta.
+
     Raises:
         ValueError: Si alguna entrada no es una transformación válida.
     """
-    raise NotImplementedError
+    T1 = _as_transform(T1, "T1", atol=atol)
+    T2 = _as_transform(T2, "T2", atol=atol)
+
+    return T2 @ T1
 
 
 def inverse_transform(T: ArrayLike, *, atol: float = 1e-8) -> NDArray[np.float64]:
@@ -178,13 +188,26 @@ def inverse_transform(T: ArrayLike, *, atol: float = 1e-8) -> NDArray[np.float64
     3x3 arbitraria; el contrato de entrada se valida antes de aplicarlo
     (docs/conventions.md, sección 5).
 
+    El contrato se valida antes de aplicar el atajo, y el resultado no se
+    revalida: como en la composición, la estructura es exacta pero la
+    ortogonalidad puede desviarse por redondeo acumulado.
+
     Returns:
         Transformación inversa, como array independiente.
 
     Raises:
         ValueError: Si T no es una transformación rígida válida.
     """
-    raise NotImplementedError
+    T = _as_transform(T, "T", atol=atol)
+
+    R = T[:3, :3]
+    t = T[:3, 3]
+
+    T_inverse = np.eye(4, dtype=np.float64)
+    T_inverse[:3, :3] = R.T
+    T_inverse[:3, 3] = -(R.T @ t)
+
+    return T_inverse
 
 
 def transform_points(
@@ -198,10 +221,25 @@ def transform_points(
     Implementa P' = P R^T + t para P de forma (N, 3), coherente con la
     convención de almacenamiento de NumPy de la sección 2.1.
 
+    Contrato de entrada de points: forma (N, 3), valores reales (se rechazan
+    los complejos), conversión a float64 y todos los valores finitos. La
+    salida es un array float64 de forma (N, 3) y la entrada no se modifica.
+
+    Args:
+        points: Conjunto de puntos de forma (N, 3), un punto por fila.
+        T: Transformación rígida de forma (4, 4).
+
+    Returns:
+        Puntos transformados, float64 de forma (N, 3).
+
     Raises:
-        ValueError: Si points no tiene forma (N, 3) o T no es válida.
+        ValueError: Si points no cumple su contrato o T no es una
+            transformación rígida válida.
     """
-    raise NotImplementedError
+    points = _as_points(points)
+    T = _as_transform(T, "T", atol=atol)
+
+    return points @ T[:3, :3].T + T[:3, 3]
 
 
 def _as_transform(
@@ -286,3 +324,39 @@ def _as_translation(
         raise ValueError(f"{nombre} debe contener valores finitos")
 
     return t
+
+
+def _as_points(points: ArrayLike) -> NDArray[np.float64]:
+    """Convierte points en un array float64 de forma (N, 3) validado.
+
+    Helper privado: comprueba forma, tipo real y finitud, en línea con la
+    validación de rotate_points en rotation.py.
+
+    Raises:
+        ValueError: Si points no es un conjunto de puntos reales finitos de
+            forma (N, 3).
+    """
+    try:
+        points = np.asarray(points)
+    except (TypeError, ValueError) as exc:
+        raise ValueError(
+            "points debe ser convertible a un array real float64"
+        ) from exc
+
+    if np.iscomplexobj(points):
+        raise ValueError("points debe contener valores reales")
+
+    try:
+        points = points.astype(np.float64, copy=False)
+    except (TypeError, ValueError, OverflowError) as exc:
+        raise ValueError(
+            "points debe ser convertible a un array real float64"
+        ) from exc
+
+    if points.ndim != 2 or points.shape[1] != 3:
+        raise ValueError("points debe tener forma (N, 3)")
+
+    if not np.all(np.isfinite(points)):
+        raise ValueError("points debe contener valores finitos")
+
+    return points
