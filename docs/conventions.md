@@ -153,15 +153,32 @@ Here, $(X_c,Y_c,Z_c)$ are coordinates in the camera frame, $(u,v)$ are image coo
 
 ## 7. Numerical Precision and Validation
 
+### 7.1 Floating-point representation
+
 - The default floating-point representation for the initial C++ implementation is double.
 - The Python reference implementation uses float64 for numerical geometry operations unless a function explicitly specifies otherwise.
+- float64 is the default format, and it must not be taken to mean that all entries are converted to it, nor that all operations are exact.
+
+### 7.2 Tolerance policy
+
 - Numerical comparisons must use explicit tolerances appropriate to the operation.
-- Absolute and relative tolerances must be distinguished. When a validation function uses only absolute tolerance, its relative tolerance must be zero.
-- The initial rotation-matrix validation tolerance is atol = 1e-8, configurable through the API. This is a default, not a universal error bound.
+- Absolute and relative tolerances must be distinguished. When a validation function uses only absolute tolerance, its relative tolerance must be zero ($\mathrm{rtol}=0$).
+- The reference absolute tolerance is `atol = 1e-8`, configurable through the API and shared by the SO(3), quaternion, and SE(3) validations. It is a default, not a universal error bound.
+- **Tolerance parameters are keyword-only.** A tolerance is always passed by keyword, never positionally. A positional float after the primary argument is a silent misbinding — it can be read as a second data argument — and it is invisible to round-trip tests. Tolerance parameters are therefore declared keyword-only (after a bare `*`), so that every call site is explicit and greppable.
+- A non-finite or negative tolerance is a violated contract: predicates return `False`; constructors and operations raise `ValueError`.
+
+### 7.3 Homogeneous representation and structural exactness
+
+- Rigid transformations are represented as $4\times4$ homogeneous matrices $T=\begin{bmatrix}R&t\\0&1\end{bmatrix}$, with $R\in\mathrm{SO}(3)$ and $t$ expressed in the destination frame.
+- The last row $[0,0,0,1]$ is structure of the representation, not an approximated geometric property. It is required exactly, with no tolerance: a matrix with noise in that row must be repaired explicitly, not validated. `atol` governs only the rotation block (orthogonality and determinant), reusing the SO(3) validation.
+- Requiring the last row exactly is what makes the matrix product preserve it exactly for two valid transformations: exact structure is closed under exact operations.
+- General rule: a geometric tolerance must never be turned into permission to admit incorrect structure. Structure is validated exactly; geometry is validated approximately.
+
+### 7.4 Input handling
+
 - Non-finite values must be handled explicitly.
 - Invalid dimensions and degenerate geometric configurations must be rejected or reported according to the API contract.
 - Validation must distinguish exact mathematical properties from approximate floating-point checks.
-- NOTE: float64 will be used as default format of reference implementation for numerical operations, but it should not be taken from this that all entries will be transformed into such format, nor that all operations will have exact precision.
 
 ## 8. Testing Requirements
 
