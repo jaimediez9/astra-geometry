@@ -22,6 +22,7 @@ from numpy.typing import NDArray
 
 def is_rotation_matrix(
     R: NDArray[np.float64],
+    *,
     atol: float = 1e-8,
 ) -> bool:
     """Comprueba si R representa una matriz de rotación de SO(3).

@@ -40,6 +40,13 @@ def test_is_unit_quaternion_rejects_invalid_inputs(q):
     assert not is_unit_quaternion(q)
 
 
+def test_is_unit_quaternion_tolerance_is_keyword_only():
+    with pytest.raises(TypeError):
+        is_unit_quaternion([1.0, 0.0, 0.0, 0.0], 1e-8)  # type: ignore[reportCallIssue]
+
+    assert is_unit_quaternion([1.0, 0.0, 0.0, 0.0], atol=1e-8)
+
+
 def test_normalize_quaternion_returns_unit_norm():
     q = normalize_quaternion([2.0, 2.0, 0.0, 0.0])
 
@@ -254,6 +261,13 @@ def test_rotation_matrix_to_quaternion_rejects_invalid_tolerance(atol):
         rotation_matrix_to_quaternion(np.eye(3), atol=atol)
 
 
+def test_rotation_matrix_to_quaternion_tolerance_is_keyword_only():
+    with pytest.raises(TypeError):
+        rotation_matrix_to_quaternion(np.eye(3), 1e-8)  # type: ignore[reportCallIssue]
+
+    rotation_matrix_to_quaternion(np.eye(3), atol=1e-8)
+
+
 def test_rotation_matrix_to_quaternion_does_not_modify_input():
     R = np.array([
         [0.0, -1.0, 0.0],
@@ -410,6 +424,14 @@ def test_quaternion_to_rotation_matrix_rejects_invalid_tolerance(atol):
             np.array([1.0, 0.0, 0.0, 0.0]),
             atol=atol,
         )
+
+
+def test_quaternion_to_rotation_matrix_tolerance_is_keyword_only():
+    q = np.array([1.0, 0.0, 0.0, 0.0])
+    with pytest.raises(TypeError):
+        quaternion_to_rotation_matrix(q, 1e-8)  # type: ignore[reportCallIssue]
+
+    quaternion_to_rotation_matrix(q, atol=1e-8)
 
 
 # Tests for conjugate_quaternion

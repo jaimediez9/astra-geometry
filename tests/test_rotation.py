@@ -118,6 +118,14 @@ def test_invalid_tolerance_is_rejected(atol):
     assert not is_rotation_matrix(np.eye(3), atol=atol)
 
 
+def test_tolerance_is_keyword_only():
+    """atol is keyword-only: a positional tolerance is a TypeError (section 7.2)."""
+    with pytest.raises(TypeError):
+        is_rotation_matrix(np.eye(3), 1e-8)  # type: ignore[reportCallIssue]
+
+    assert is_rotation_matrix(np.eye(3), atol=1e-8)
+
+
 """
 Axis and angle validation
 """

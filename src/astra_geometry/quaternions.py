@@ -7,6 +7,7 @@ from .rotation import is_rotation_matrix
 
 def is_unit_quaternion(
     q: ArrayLike,
+    *,
     atol: float = 1e-8,
 ) -> bool:
     """Check whether q is a valid unit quaternion.
@@ -199,6 +200,7 @@ def quaternion_multiply(
 
 def rotation_matrix_to_quaternion(
     R: ArrayLike,
+    *,
     atol: float = 1e-8,
 ) -> NDArray[np.float64]:
     """Convierte una matriz de rotación SO(3) en un cuaternión unitario.
@@ -295,6 +297,7 @@ def rotation_matrix_to_quaternion(
 
 def quaternion_to_rotation_matrix(
     q: ArrayLike,
+    *,
     atol: float = 1e-8,
 ) -> NDArray[np.float64]:
     """Convierte un cuaternión unitario en una matriz de rotación 3D.
