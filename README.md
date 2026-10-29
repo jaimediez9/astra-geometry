@@ -27,7 +27,7 @@ src/astra_geometry/   Python reference implementation
 tests/                Contract- and property-oriented test suite
 docs/conventions.md   Mathematical conventions (normative for the API)
 cpp/                  C++20 core — planned, currently empty
-benchmarks/           Timing and memory measurements — planned, currently empty
+benchmarks/           Timing, memory and validation-cost measurements (stdlib harness)
 examples/             Runnable examples — planned, currently empty
 ```
 
@@ -155,6 +155,20 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
 ctest --test-dir build --output-on-failure
 ```
+
+## Benchmarks
+
+`benchmarks/` measures the frozen SO(3), quaternion and SE(3) API with a standard-library harness (`time`, `tracemalloc`, `hashlib`). It is a **design signal** for the planned C++20 core — how many temporaries and allocations the API makes per call — not a prediction of on-target timing.
+
+```bash
+python -m benchmarks.run                                   # all cases, JSON to stdout
+python -m benchmarks.run --repeat 300 --out benchmarks/results/bench.json
+pytest -m bench                                            # harness smoke tests
+```
+
+Per case it records per-call timing (median/IQR/min/max), approximate peak memory, a static count of array-shaped temporaries, a bit-for-bit output checksum, and the scaling sweep for the point-set operations. It also reports the **validation-cost ratio**: the cost of each `is_*` predicate against the operation it guards — the input that decides whether validated and trusted paths must be separated in the core.
+
+**Measurement caveat.** On a machine without a pinned CPU frequency, absolute times for identical code swung 2–4× between runs. Every measurement is therefore bracketed by a fixed calibration probe and reported **normalized** (case time / probe time); the normalized ratios are stable to a few percent and are the numbers to compare. Raw nanoseconds are kept for the record only.
 
 ## Project roadmap
 
