@@ -22,4 +22,8 @@ where = ["src"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+addopts = ["-m", "not bench"]
+markers = [
+    "bench: benchmark-harness smoke tests (deselected by default; run with -m bench)",
+]
 
