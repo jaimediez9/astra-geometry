@@ -43,7 +43,7 @@ examples/             Runnable examples — planned, currently empty
 | Quaternions | Conversion to and from rotation matrices | implemented |
 | Quaternions | Composition and inversion | implemented (unit inverse = conjugate) |
 | SE(3) | Rigid transformations, composition, and inversion | implemented |
-| Camera geometry | Intrinsics, extrinsics, and 3D-to-2D projection | pending |
+| Camera geometry | Intrinsics, extrinsics, and 3D-to-2D projection | implemented (pinhole; lens distortion out of scope) |
 | Estimation | Rigid alignment from point correspondences | pending |
 | Validation | Property-based tests, numerical error analysis, and reference comparisons | partial |
 | Visualization | 3D coordinate frames, camera geometry, and projection results | pending |
@@ -133,6 +133,20 @@ from astra_geometry.transforms import (
 )
 ```
 
+Camera operations are importable from their submodule only, under the same policy:
+
+```python
+from astra_geometry.camera import (
+    backproject_pixels,
+    intrinsic_matrix,
+    is_intrinsic_matrix,
+    project,
+    project_points,
+    reprojection_residual,
+    world_to_camera,
+)
+```
+
 Validation predicates (`is_rotation_matrix`, `is_unit_quaternion`, `is_transformation_matrix`) return `False` for invalid input instead of raising; constructors and operations raise `ValueError` on violated contracts.
 
 ## Build and test
@@ -178,7 +192,7 @@ Per case it records per-call timing (median/IQR/min/max), approximate peak memor
 - [x] Implement and test SO(3) operations.
 - [x] Complete quaternion support: composition, inversion, and conversion to and from rotation matrices. *Inversion is exposed as the conjugate, which is the inverse for unit quaternions; a general (non-unit) inverse is not implemented.*
 - [x] Implement SE(3) transformations. *Validation, construction, composition, inversion and application to points are done. The last row of a homogeneous matrix is required to be exactly [0, 0, 0, 1]: it is structure, not an approximated geometric property, and carries no tolerance.*
-- [ ] Implement pinhole camera projection.
+- [x] Implement pinhole camera projection. *Intrinsics, extrinsics as SE(3), projection, back-projection with depth, and a reprojection residual. Lens distortion is out of scope (not in conventions.md section 6).*
 - [ ] Implement rigid transformation estimation using SVD.
 - [ ] Extend numerical validation and reference comparisons. *Validation predicates and explicit tolerance handling are in place.*
 - [ ] Develop a reproducible 3D visualization example.
