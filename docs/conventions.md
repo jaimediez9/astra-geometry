@@ -151,6 +151,15 @@ $$
 
 Here, $(X_c,Y_c,Z_c)$ are coordinates in the camera frame, $(u,v)$ are image coordinates, and $\lambda$ is the projective scale. For the standard pinhole camera model, $\lambda=Z_c$, assuming the stated intrinsic matrix and $Z_c\ne0$.
 
+### 6.1 Image and pixel convention
+
+- Image coordinates $(u,v)$ are expressed in pixels.
+- The origin $(0,0)$ is the top-left corner of the image; $u$ increases to the right and $v$ increases downward (the standard image convention).
+- The principal point $(c_x,c_y)$ is given in pixels in the same convention.
+- The focal lengths are positive: $f_x>0,\ f_y>0$.
+
+The last row of $K$ is $[0,0,1]$ and the entry below the diagonal is $0$: both are structure of the representation, required exactly and carrying no tolerance, in the same sense as the last row of a rigid transformation (section 7.3). The skew $s$ may be non-zero and is validated only for finiteness.
+
 ## 7. Numerical Precision and Validation
 
 ### 7.1 Floating-point representation
