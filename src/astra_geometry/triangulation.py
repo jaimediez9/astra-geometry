@@ -22,9 +22,17 @@ Signo y profundidad (sección 6.3):
     (sección 6.2). Esta función NO impone ese signo: lo devuelve.
 
 Degeneración:
-    Si los dos rayos son (casi) paralelos, el punto está (casi) en el infinito
-    y la coordenada homogénea se anula. Ese caso se RECHAZA (ValueError) en
-    lugar de devolver una profundidad sin sentido.
+    Dos casos se RECHAZAN (ValueError) en lugar de devolver un resultado sin
+    sentido:
+
+    * Rayos (casi) paralelos: el punto está (casi) en el infinito y la
+      coordenada homogénea se anula.
+    * Centros ópticos coincidentes: las filas de A son combinaciones de filas
+      de P, y P·C = 0, así que el centro común de las dos cámaras pertenece al
+      núcleo de A. El rango de A cae de 3 a 2 y la solución deja de ser única:
+      el vector singular menor puede ser el propio centro de proyección, cuya
+      profundidad es nula. Se detecta con un criterio de RANGO RELATIVO
+      (véase _RANK_RATIO), no con una tolerancia absoluta.
 
 Este módulo importa camera.py y transforms.py, y nunca al contrario.
 """
@@ -40,6 +48,13 @@ __all__ = [
     "triangulate",
     "triangulate_points",
 ]
+
+# Umbral RELATIVO de rango para la triangulación DLT (véase _triangulate_one).
+# Es distinto de `atol` en semántica: `atol` es absoluto y gobierna la
+# coordenada homogénea del punto en el infinito sobre un vector de norma
+# unitaria, mientras que este umbral es adimensional y se aplica al cociente
+# entre valores singulares de A. Justificación numérica en _triangulate_one.
+_RANK_RATIO = 1e-12
 
 
 def projection_matrix(
@@ -124,11 +139,36 @@ def triangulate_points(
             v2 * P2[2] - P2[1],
         ))
 
-        homogeneous = np.linalg.svd(A)[2][-1]  # norma unitaria
+        # La solución es única si y solo si rank(A) = 3, esto es, si el SEGUNDO
+        # valor singular menor no es despreciable frente al mayor. Con centros
+        # ópticos coincidentes el centro común pertenece al núcleo de A y el
+        # rango cae a 2: Vt[-1] deja de ser la solución y puede ser el propio
+        # centro de proyección, de profundidad nula.
+        #
+        # El criterio es RELATIVO a sigma_0 porque la escala de A depende de la
+        # magnitud de los píxeles; un umbral absoluto cambiaría de significado al
+        # cambiar K. Análisis numérico (8 correspondencias, escena a 4-9, focales
+        # 760-800):
+        #   * centros coincidentes (P1 == P2; rotación pura 90 y 180 grados con
+        #     intrínsecos distintos): sigma_2/sigma_0 <= 7e-17, es decir ruido de
+        #     redondeo; el ratio es invariante de escala (0.1x a 100x en K).
+        #   * configuraciones válidas: >= 4e-7 con una baseline de 1e-6, >= 2e-4
+        #     añadiendo 0.5 px de ruido, y >= 4e-3 en 200 poses aleatorias.
+        # 1e-12 separa ambos regímenes con ~4 órdenes de margen por arriba y ~5
+        # por abajo, y no rechaza ninguna configuración de rango pleno.
+        _, singular, Vt = np.linalg.svd(A)
+        homogeneous = Vt[-1]  # norma unitaria
 
         if not np.all(np.isfinite(homogeneous)):
             raise ValueError(
                 f"triangulación no finita para la correspondencia {i}"
+            )
+
+        if singular[2] <= _RANK_RATIO * singular[0]:
+            raise ValueError(
+                f"triangulación degenerada en la correspondencia {i}: los centros "
+                "ópticos de las dos cámaras coinciden, el sistema no tiene rango "
+                "suficiente (rango 2 en lugar de 3) y la solución no es única"
             )
 
         if abs(homogeneous[3]) <= atol:

@@ -190,6 +190,136 @@ def test_atol_controls_the_infinity_threshold():
         triangulate(pixels1, pixels2, K1, K2, T, atol=1.0)
 
 
+# --- coincident optical centres (rank-deficient DLT) ---
+#
+# The rows of A are combinations of rows of P, and P·C = 0, so the common
+# centre of the two cameras belongs to the null space of A. When the centres
+# coincide the null space becomes two-dimensional — span{centre, point at
+# infinity} — the rank drops from 3 to 2 and the smallest singular vector stops
+# being the solution. It can be the projection centre itself, whose depth is
+# zero. These configurations are rejected; the depth sign itself is still NOT
+# imposed here (see test_depth_sign_follows_the_geometry).
+
+_NO_TRANSLATION = np.array([0.0, 0.0, 0.0])
+# A pure rotation (no translation), so the centres coincide but the scene stays
+# in front of both cameras — a 180 degree turn would put it behind camera 2 and
+# be rejected by the projection contract before reaching the triangulation.
+_PURE_ROTATION = transform_from_blocks((0.0, 0.2, 0.98), 0.2, _NO_TRANSLATION)
+
+
+def test_rejects_coincident_centres_with_equal_intrinsics():
+    """P1 == P2: identical pose and intrinsics, identical observations."""
+    X = _scene(seed=31)
+    pixels = project(X, K1, identity_transform())
+    with pytest.raises(ValueError, match="no es única"):
+        triangulate(pixels, pixels, K1, K1, identity_transform())
+
+
+def test_rejects_coincident_centres_with_a_relative_rotation():
+    """Same centre, different orientation and different intrinsics."""
+    X = _scene(seed=32)
+    with pytest.raises(ValueError, match="no es única"):
+        triangulate(project(X, K1, identity_transform()),
+                    project(X, K2, _PURE_ROTATION), K1, K2, _PURE_ROTATION)
+
+
+def test_rejects_coincident_centres_with_different_intrinsics():
+    """Same centre and same orientation, but different intrinsics."""
+    X = _scene(seed=33)
+    with pytest.raises(ValueError, match="no es única"):
+        triangulate(project(X, K1, identity_transform()),
+                    project(X, K2, identity_transform()), K1, K2,
+                    identity_transform())
+
+
+def test_triangulate_points_inherits_the_rank_check():
+    """The general entry point shares the degeneracy handling."""
+    X = _scene(seed=34)
+    pixels = project(X, K1, identity_transform())
+    P = projection_matrix(K1, identity_transform())
+    with pytest.raises(ValueError, match="no es única"):
+        triangulate_points(pixels, pixels, P, P)
+
+
+def test_the_infinity_and_rank_checks_are_independent():
+    """A point at infinity still reports the infinity reason, not the rank one."""
+    direction = np.array([0.2, -0.3, 1.0])
+    direction = direction / np.linalg.norm(direction)
+    T = _relative_pose()
+    world = (direction * 1e9)[None, :]  # the same world point in both views
+    with pytest.raises(ValueError, match="infinito"):
+        triangulate(project(world, K1, identity_transform()),
+                    project(world, K2, T), K1, K2, T)
+
+
+def test_accepts_a_small_but_non_zero_baseline():
+    """A tiny baseline is ill-conditioned, not rank-deficient: it is accepted."""
+    X = _scene(seed=35)
+    T = transformation_matrix(np.eye(3), np.array([1e-6, 0.0, 0.0]))
+    points = triangulate(project(X, K1, identity_transform()),
+                         project(X, K2, T), K1, K2, T)
+    assert np.all(np.isfinite(points))
+    assert np.all(points[:, 2] > 0.0)
+    np.testing.assert_allclose(points, X, atol=1e-4)
+
+
+@pytest.mark.parametrize("baseline,accepted", [
+    (1e-11, True),   # sigma_2/sigma_0 ~ 5e-12: just above the rank threshold
+    (1e-13, False),  # sigma_2/sigma_0 ~ 5e-14: just below it
+])
+def test_the_rank_threshold_is_straddled_by_the_baseline(baseline, accepted):
+    """Exercises the threshold from both sides, close to it."""
+    X = _scene(seed=36)
+    T = transformation_matrix(np.eye(3), np.array([baseline, 0.0, 0.0]))
+    pixels1 = project(X, K1, identity_transform())
+    pixels2 = project(X, K2, T)
+    if accepted:
+        assert np.all(np.isfinite(triangulate(pixels1, pixels2, K1, K2, T)))
+    else:
+        with pytest.raises(ValueError, match="no es única"):
+            triangulate(pixels1, pixels2, K1, K2, T)
+
+
+@pytest.mark.parametrize("scale", [0.01, 100.0])
+def test_the_rank_criterion_is_relative_not_absolute(scale):
+    """A pixel-unit change must not move the accept/reject boundary.
+
+    Guards the criterion's semantics: an absolute threshold on the singular
+    values would follow the scale of A and reject (or accept) different
+    configurations after a change of units.
+    """
+    X = _scene(seed=37)
+    K_big = intrinsic_matrix(800.0 * scale, 800.0 * scale, 640.0 * scale, 360.0 * scale)
+    K_big2 = intrinsic_matrix(780.0 * scale, 780.0 * scale, 610.0 * scale, 380.0 * scale)
+
+    # A valid configuration stays valid.
+    T = _relative_pose()
+    points = triangulate(project(X, K_big, identity_transform()),
+                         project(X, K_big2, T), K_big, K_big2, T)
+    np.testing.assert_allclose(points, X, atol=1e-6)
+
+    # A degenerate one stays rejected.
+    T_rot = _PURE_ROTATION
+    with pytest.raises(ValueError, match="no es única"):
+        triangulate(project(X, K_big, identity_transform()),
+                    project(X, K_big2, T_rot), K_big, K_big2, T_rot)
+
+
+@pytest.mark.parametrize("axis,angle,t", [
+    ((0.0, 0.2, 0.98), 0.2, (0.9, -0.3, 0.15)),
+    ((0.2, -0.7, 0.68), 0.4, (2.0, -1.0, 0.5)),
+    ((-0.5, 0.1, 0.86), 0.15, (0.4, 0.9, -0.2)),
+    ((1.0, 0.0, 0.0), -0.9, (0.1, 0.1, 0.1)),
+])
+def test_normal_configurations_are_not_rejected(axis, angle, t):
+    """The rank check must not bite on ordinary, well-posed geometry."""
+    X = _scene(seed=38)
+    T = transform_from_blocks(axis, angle, t)
+    points = triangulate(project(X, K1, identity_transform()),
+                         project(X, K2, T), K1, K2, T)
+    np.testing.assert_allclose(points, X, atol=1e-8)
+
+
 # --- input validation ---
 
 def test_rejects_mismatched_correspondence_counts():
