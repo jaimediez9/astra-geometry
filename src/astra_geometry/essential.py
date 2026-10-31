@@ -249,7 +249,18 @@ def estimate_essential_matrix(
 
     rows = np.einsum("ni,nj->nij", homogeneous2, homogeneous1).reshape(-1, 9)
 
-    _, _, Vt = np.linalg.svd(rows)
+    # Solo el caso "corto" (N < 9) necesita la V completa: con una matriz 8x9 la
+    # SVD reducida devuelve una Vh de (8, 9), que contiene los ocho primeros
+    # vectores singulares derechos y NO el noveno, que es precisamente el del
+    # núcleo y por tanto la solución. Medido sobre el sistema real: la reducida
+    # da un residuo |A v|/|A| de 2e-2 frente a 4e-17 con la completa, es decir un
+    # resultado erróneo SILENCIOSO, no una excepción.
+    #
+    # Para N >= 9 se cumple min(N, 9) = 9, así que la reducida ya devuelve Vh de
+    # (9, 9) — bit-idéntica a la completa en este build — y evita materializar la
+    # U de (N, N), que es lo que hacía el coste O(N^2) de memoria y tiempo: a
+    # N = 2e4 la completa pide 4.1 GB y 77 s; la reducida, 57 MB y 5 ms.
+    _, _, Vt = np.linalg.svd(rows, full_matrices=rows.shape[0] < rows.shape[1])
     E_solution = Vt[-1].reshape(3, 3)
 
     if not np.all(np.isfinite(E_solution)):

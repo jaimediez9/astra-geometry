@@ -480,3 +480,215 @@ def test_tolerance_is_keyword_only():
         estimate_relative_pose(pixels1, pixels2, K1, K2, 1e-8)  # type: ignore[reportCallIssue]
 
     assert len(estimate_relative_pose(pixels1, pixels2, K1, K2, atol=1e-8)) == 2
+
+
+# --- the linear solve: full vs reduced right singular vectors -----------------
+#
+# estimate_essential_matrix reads the right singular vector of the SMALLEST
+# singular value of an (N, 9) design matrix. A reduced SVD returns a (9, 9) Vh
+# only when min(N, 9) = 9, that is from N = 9 on. With N = 8 it returns (8, 9),
+# which contains the first eight right singular vectors and NOT the ninth — the
+# one in the null space, which is the solution. Using it would return a wrong
+# essential matrix silently, so the short case keeps the full decomposition.
+# These tests pin the boundary, the equivalence with the full path, and that
+# nothing else changed.
+
+
+def _hartley_reference(xy):
+    """Hartley normalization written independently, as this test's own oracle."""
+    centroid = xy.mean(axis=0)
+    scale = np.sqrt(2.0) / np.linalg.norm(xy - centroid, axis=1).mean()
+    normal = np.array([
+        [scale, 0.0, -scale * centroid[0]],
+        [0.0, scale, -scale * centroid[1]],
+        [0.0, 0.0, 1.0],
+    ])
+    centred = (xy - centroid) * scale
+    return normal, np.hstack((centred, np.ones((len(centred), 1))))
+
+
+def _design_matrix(x1, x2):
+    """The design matrix, rebuilt here from independent code."""
+    _, h1 = _hartley_reference(x1)
+    _, h2 = _hartley_reference(x2)
+    return np.einsum("ni,nj->nij", h2, h1).reshape(-1, 9)
+
+
+def _reference_essential(x1, x2):
+    """E from the FULL SVD: the pre-correction path, used as the oracle.
+
+    Same algorithm, same normalization, same essential-manifold projection —
+    only the amount of V that gets materialized differs.
+    """
+    rows = _design_matrix(x1, x2)
+    normal1, _ = _hartley_reference(x1)
+    normal2, _ = _hartley_reference(x2)
+    _, _, Vt = np.linalg.svd(rows, full_matrices=True)
+    raw = normal2.T @ Vt[-1].reshape(3, 3) @ normal1
+    U, singular, Vt_E = np.linalg.svd(raw)
+    sigma = 0.5 * (singular[0] + singular[1])
+    E = U @ np.diag([sigma, sigma, 0.0]) @ Vt_E
+    return E / (np.linalg.norm(E) / np.sqrt(2.0))
+
+
+def _same_essential(left, right, atol=1e-9):
+    """Compare two essential matrices up to the global scale AND sign.
+
+    Both are already normalized to ||E||_F = sqrt(2), so only the sign is
+    free: E and -E describe the same two-view geometry.
+    """
+    left = left / np.linalg.norm(left)
+    right = right / np.linalg.norm(right)
+    return min(np.abs(left - right).max(), np.abs(left + right).max()) <= atol
+
+
+@pytest.mark.parametrize("n", [9, 10, 16, 24, 64, 256])
+def test_the_reduced_svd_gives_the_same_null_vector_from_nine_on(n):
+    """min(N, 9) = 9 from N = 9 on, so nothing is lost by not forming U(N,N)."""
+    pixels1, pixels2, _, _ = _correspondences(*POSE_CASES[0], n=n)
+    rows = _design_matrix(_normalized(pixels1, K1), _normalized(pixels2, K2))
+
+    full = np.linalg.svd(rows, full_matrices=True)[2]
+    reduced = np.linalg.svd(rows, full_matrices=False)[2]
+
+    assert full.shape == (9, 9) and reduced.shape == (9, 9)
+    tolerance = 1e-12  # component-wise, on unit-norm singular vectors
+    np.testing.assert_allclose(reduced[-1], full[-1], atol=tolerance)
+    # Both are null vectors of the same system.
+    scale = np.linalg.norm(rows, 2)
+    assert np.abs(rows @ reduced[-1]).max() / scale < 1e-14
+
+
+def test_eight_correspondences_need_the_full_right_singular_vectors():
+    """The 8x9 case: the reduced Vh cannot contain the ninth vector."""
+    pixels1, pixels2, _, _ = _correspondences(*POSE_CASES[0], n=8)
+    rows = _design_matrix(_normalized(pixels1, K1), _normalized(pixels2, K2))
+    assert rows.shape == (8, 9)
+
+    full = np.linalg.svd(rows, full_matrices=True)[2]
+    reduced = np.linalg.svd(rows, full_matrices=False)[2]
+
+    assert full.shape == (9, 9)
+    assert reduced.shape == (8, 9)  # the null vector is simply absent
+
+    scale = np.linalg.norm(rows, 2)
+    assert np.abs(rows @ full[-1]).max() / scale < 1e-14          # the solution
+    # The naive alternative is not merely imprecise: it is a different vector,
+    # far from the null space of the system.
+    assert np.abs(rows @ reduced[-1]).max() / scale > 1e-3
+
+
+@pytest.mark.parametrize("n", [8, 9, 10, 16, 64, 256])
+@pytest.mark.parametrize("axis,angle,t", POSE_CASES)
+def test_the_estimate_matches_the_full_svd_reference(axis, angle, t, n):
+    """Across the branch boundary, the estimate equals the full-SVD one."""
+    pixels1, pixels2, _, _ = _correspondences(axis, angle, t, n=n)
+    x1, x2 = _normalized(pixels1, K1), _normalized(pixels2, K2)
+
+    estimate = estimate_essential_matrix(x1, x2)
+    reference = _reference_essential(x1, x2)
+
+    assert is_essential_matrix(estimate)
+    assert _same_essential(estimate, reference), "difieren más allá del signo y la escala"
+    residual = np.einsum("ni,ij,nj->n",
+                         _homogeneous_normalized(pixels2, K2), estimate,
+                         _homogeneous_normalized(pixels1, K1))
+    assert np.abs(residual).max() < 1e-10
+
+
+@pytest.mark.parametrize("n", [8, 9, 16, 64])
+def test_the_pose_is_equivalent_across_the_branch_boundary(n):
+    """A sign flip of E does not change the pose cheirality selects."""
+    pixels1, pixels2, _, _ = _correspondences(*POSE_CASES[2], n=n)
+    R_est, t_hat = estimate_relative_pose(pixels1, pixels2, K1, K2)
+    _, _, R_true, t_true = _correspondences(*POSE_CASES[2], n=n)
+
+    np.testing.assert_allclose(R_est, R_true, atol=1e-9)
+    assert float(np.dot(t_hat, t_true / np.linalg.norm(t_true))) == pytest.approx(1.0)
+
+
+@pytest.mark.parametrize("n", [8, 24])
+def test_degenerate_configurations_match_the_full_svd_reference(n):
+    """Collinear, planar and pure-translation data behave as they did before."""
+    rng = np.random.default_rng(41)
+    with_translation = transform_from_blocks((0.0, 0.2, 0.98), 0.2, (1.4, -0.6, 0.35))
+    configurations = {
+        "colineales": np.column_stack((np.arange(n, dtype=float),
+                                       2.0 * np.arange(n, dtype=float),
+                                       6.0 + 3.0 * np.arange(n, dtype=float))),
+        "coplanares": np.column_stack((rng.uniform(-1.5, 1.5, n),
+                                       rng.uniform(-1.5, 1.5, n), np.full(n, 7.0))),
+    }
+    for label, points in configurations.items():
+        for pose in (with_translation,):
+            x1 = _normalized(project(points, K1, identity_transform()), K1)
+            x2 = _normalized(project(points, K2, pose), K2)
+            estimate = estimate_essential_matrix(x1, x2)
+            assert np.all(np.isfinite(estimate)), label
+            assert _same_essential(estimate, _reference_essential(x1, x2)), label
+
+    # Pure translation: the rotation is unobservable but the estimate is still
+    # the same matrix either way, and it must not depend on the branch.
+    points = _scene(n=n, seed=44)
+    translation_only = transform_from_blocks((0.0, 0.0, 1.0), 0.0, (1.4, -0.6, 0.35))
+    x1 = _normalized(project(points, K1, identity_transform()), K1)
+    x2 = _normalized(project(points, K2, translation_only), K2)
+    assert _same_essential(estimate_essential_matrix(x1, x2),
+                           _reference_essential(x1, x2))
+
+
+@pytest.mark.parametrize("n", [8, 9, 64])
+@pytest.mark.parametrize("sigma", [0.5, 2.0])
+def test_pixel_noise_keeps_the_two_paths_in_agreement(n, sigma):
+    """With noise the estimate degrades, but both paths degrade identically."""
+    pixels1, pixels2, _, _ = _correspondences(*POSE_CASES[0], n=n, seed=5)
+    rng = np.random.default_rng(9)
+    noisy1 = pixels1 + rng.normal(0.0, sigma, pixels1.shape)
+    noisy2 = pixels2 + rng.normal(0.0, sigma, pixels2.shape)
+    x1, x2 = _normalized(noisy1, K1), _normalized(noisy2, K2)
+
+    estimate = estimate_essential_matrix(x1, x2)
+    assert is_essential_matrix(estimate)
+    assert _same_essential(estimate, _reference_essential(x1, x2))
+
+
+@pytest.mark.parametrize("scale", [1e-3, 1.0, 1e3])
+def test_intrinsics_scaling_does_not_affect_the_estimate(scale):
+    """A pixel-unit change is absorbed by Hartley normalization, not by the SVD."""
+    K_scaled = intrinsic_matrix(800.0 * scale, 800.0 * scale,
+                                640.0 * scale, 360.0 * scale)
+    K_scaled2 = intrinsic_matrix(780.0 * scale, 780.0 * scale,
+                                 610.0 * scale, 380.0 * scale)
+    # The observations are made THROUGH the scaled intrinsics: this is a change
+    # of pixel units, not a reinterpretation of the same pixels.
+    points = _scene(n=64, seed=6)
+    pose = transform_from_blocks(*POSE_CASES[0])
+    pixels1 = project(points, K_scaled, identity_transform())
+    pixels2 = project(points, K_scaled2, pose)
+    x1, x2 = _normalized(pixels1, K_scaled), _normalized(pixels2, K_scaled2)
+
+    estimate = estimate_essential_matrix(x1, x2)
+    assert _same_essential(estimate, _reference_essential(x1, x2))
+
+    residual = np.einsum("ni,ij,nj->n",
+                         _homogeneous_normalized(pixels2, K_scaled2), estimate,
+                         _homogeneous_normalized(pixels1, K_scaled))
+    assert np.abs(residual).max() < 1e-10
+
+    # And the pose is still recovered, so the scale never reaches the solver.
+    axis, angle, _ = POSE_CASES[0]
+    R_est, t_hat = estimate_relative_pose(pixels1, pixels2, K_scaled, K_scaled2)
+    np.testing.assert_allclose(R_est, rotation_matrix_about(axis, angle), atol=1e-9)
+    assert np.linalg.norm(t_hat) == pytest.approx(1.0)
+
+
+def test_the_eight_correspondence_minimum_is_unchanged():
+    """The branch boundary is 8, not 9: exactly eight still solves."""
+    pixels1, pixels2, _, _ = _correspondences(*POSE_CASES[0], n=8)
+    x1, x2 = _normalized(pixels1, K1), _normalized(pixels2, K2)
+    assert is_essential_matrix(estimate_essential_matrix(x1, x2))
+
+    pixels1, pixels2, _, _ = _correspondences(*POSE_CASES[0], n=7)
+    x1, x2 = _normalized(pixels1, K1), _normalized(pixels2, K2)
+    with pytest.raises(ValueError, match="8"):
+        estimate_essential_matrix(x1, x2)
