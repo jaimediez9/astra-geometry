@@ -10,9 +10,13 @@ behaves (per-point cost amortizes as N grows).
 
 from __future__ import annotations
 
+import json
+import os
 import pathlib
+import subprocess
 import sys
 
+import numpy as np
 import pytest
 
 # Make the repo-root ``benchmarks`` package importable regardless of pytest's
@@ -20,6 +24,7 @@ import pytest
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
 
 from benchmarks import cases  # noqa: E402
+from benchmarks import memory as memory_measurement  # noqa: E402
 from benchmarks.harness import time_call  # noqa: E402
 from benchmarks.run import _measure_case, _validation_ratios  # noqa: E402
 
@@ -105,3 +110,93 @@ def test_validation_ratios_are_computed():
     key = "is_transformation_matrix / compose_transforms"
     assert key in ratios
     assert ratios[key]["ratio"] > 0.0
+
+
+def _run_module(sizes: str, destination: pathlib.Path) -> dict:
+    """Run this module as its own light process and read back its report.
+
+    Spawning the children from *here* would inherit this process's resident set
+    (see the module docstring), so the measurement goes through one extra,
+    deliberately light layer: the CLI never holds a large array.
+    """
+    environment = dict(os.environ)
+    for variable in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS"):
+        environment[variable] = "1"
+    subprocess.run(
+        [sys.executable, "-m", "benchmarks.memory", "--sizes", sizes,
+         "--out", str(destination)],
+        cwd=str(pathlib.Path(__file__).resolve().parents[1]),
+        env=environment, check=True, capture_output=True, text=True,
+    )
+    return json.loads(destination.read_text(encoding="utf-8"))
+
+
+def _by_variant(report: dict, n: int) -> dict:
+    return {m["variant"]: m for m in report["measurements"] if m["n"] == n}
+
+
+def test_memory_measurement_sees_the_pre_correction_allocation(tmp_path):
+    """The measurement must SEE the O(N^2) difference it exists for.
+
+    At N = 4000 the pre-correction full SVD reserves ~236 MB where the reduced
+    one reserves ~1.5 MB — two orders of magnitude, far above the noise floor.
+    """
+    report = _run_module("4000", tmp_path / "memory.json")
+    measured = _by_variant(report, 4_000)
+
+    assert measured["baseline"]["residual"] is None  # it only builds the system
+    assert measured["reduced"]["residual"] < 1e-14
+    assert measured["full"]["residual"] < 1e-14
+    assert measured["reduced"]["attributable_rss_mb"] < 10.0, \
+        "the corrected path must stay flat"
+    assert measured["full"]["attributable_rss_mb"] > 100.0, \
+        "the pre-correction path must be visible"
+
+
+def test_memory_measurement_is_robust_to_a_heavy_parent(tmp_path):
+    """A heavy parent must not shrink the reported cost.
+
+    Before the protocol was fixed, a parent holding a large array made every
+    child report that floor and the measured cost of the pre-correction path
+    collapsed from ~236 MB to ~55 MB — a silent under-report of exactly the bug
+    this module exists to expose.
+    """
+    ballast = np.full(200_000_000 // 8, 1.0)  # ~200 MB held by THIS process
+    assert ballast.sum() > 0.0                # touched, so it is resident
+
+    report = _run_module("4000", tmp_path / "memory.json")
+    measured = _by_variant(report, 4_000)
+
+    # The extra process layer keeps the children's floor small...
+    assert measured["baseline"]["startup_rss_mb"] < 150.0
+    # ...so the attributable cost is the real one.
+    assert measured["full"]["attributable_rss_mb"] > 100.0
+
+
+def test_the_inherited_floor_documents_why_an_extra_layer_is_needed():
+    """Pin the mechanism: a child forked from a heavy parent inherits its floor.
+
+    This is why the module is run as a subprocess rather than imported here.
+    """
+    ballast = np.full(200_000_000 // 8, 1.0)
+    assert ballast.sum() > 0.0
+    record = memory_measurement._run_child("baseline", 8)
+    assert record["startup_rss_mb"] > 150.0, \
+        "the child should inherit this process's resident set"
+
+
+def test_memory_measurement_exposes_the_wrong_short_case():
+    """At N = 8 the reduced path is not the solution, and the module shows it."""
+    baseline = memory_measurement._run_child("baseline", 8)
+    reduced = memory_measurement._run_child("reduced", 8)
+    full = memory_measurement._run_child("full", 8)
+
+    assert baseline["residual"] is None
+    assert reduced["residual"] > 1e-3   # a different vector, not the null one
+    assert full["residual"] < 1e-14     # the actual solution
+
+
+def test_memory_module_keeps_the_previous_sizes_in_its_sweep():
+    for size in (8, 16, 64, 256):
+        assert size in memory_measurement.SIZES
+    assert memory_measurement.SIZES == (8, 16, 64, 256, 1_000, 10_000, 100_000)

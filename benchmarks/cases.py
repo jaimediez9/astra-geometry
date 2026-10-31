@@ -68,7 +68,11 @@ SIZES: tuple[int, ...] = (1, 10, 100, 1_000, 10_000, 100_000, 1_000_000)
 # original 20 cases keep exactly the sizes they were measured with.
 ESTIMATION_SIZES: tuple[int, ...] = (3, 10, 100, 1_000, 10_000)
 TRIANGULATION_SIZES: tuple[int, ...] = (1, 10, 100, 1_000)
-ESSENTIAL_SIZES: tuple[int, ...] = (8, 16, 64, 256)
+# The essential-matrix sweep used to stop at 256 because the solve allocated an
+# (N, N) U: at N = 1e5 that is 74.5 GiB. With the reduced-SVD fix the ceiling is
+# gone, so the sweep now reaches the sizes where the old implementation was
+# impossible. The small sizes are kept unchanged to guard against regressions.
+ESSENTIAL_SIZES: tuple[int, ...] = (8, 16, 64, 256, 1_000, 10_000, 100_000)
 RELATIVE_POSE_SIZES: tuple[int, ...] = (8, 32, 128, 512)
 
 
