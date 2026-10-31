@@ -44,6 +44,8 @@ examples/             Runnable examples — planned, currently empty
 | Quaternions | Composition and inversion | implemented (unit inverse = conjugate) |
 | SE(3) | Rigid transformations, composition, and inversion | implemented |
 | Camera geometry | Intrinsics, extrinsics, and 3D-to-2D projection | implemented (pinhole; lens distortion out of scope) |
+| Triangulation | 3D reconstruction from two views | implemented (linear DLT) |
+| Epipolar geometry | Essential matrix and relative pose up to scale | implemented (calibrated; essential only) |
 | Estimation | Rigid alignment from point correspondences | implemented (3D-3D Kabsch; no scale, no outliers) |
 | Validation | Property-based tests, numerical error analysis, and reference comparisons | partial |
 | Visualization | 3D coordinate frames, camera geometry, and projection results | pending |
@@ -153,6 +155,20 @@ Estimation operations are importable from their submodule only, under the same p
 from astra_geometry.estimation import estimate_rigid_transform
 ```
 
+Triangulation and epipolar operations are importable from their submodules only:
+
+```python
+from astra_geometry.triangulation import projection_matrix, triangulate, triangulate_points
+from astra_geometry.essential import (
+    decompose_essential_matrix,
+    essential_matrix,
+    estimate_essential_matrix,
+    estimate_relative_pose,
+    is_essential_matrix,
+    select_candidate,
+)
+```
+
 Validation predicates (`is_rotation_matrix`, `is_unit_quaternion`, `is_transformation_matrix`) return `False` for invalid input instead of raising; constructors and operations raise `ValueError` on violated contracts.
 
 ## Build and test
@@ -218,6 +234,46 @@ T = estimate_rigid_transform(source, target)   # (N,3), (N,3) -> (4,4)
 
 Consequently the reprojection residual in `camera.py` is not what Kabsch minimises — Kabsch minimises distances between 3D points. The residual serves to *validate* an estimated pose on synthetic data, and it would be the objective of a future PnP.
 
+## Epipolar geometry and triangulation
+
+Two chapters cover the two-view geometry that sits between the camera model and visual odometry.
+
+### Triangulation — 2D → 3D
+
+Given a point observed in two views, with both cameras known, reconstruct its 3D position. Taking frame 1 as the reference, the projection matrices are `P1 = K1 [I | 0]` and `P2 = K2 [R | t]`, with `R, t` from `T_{2←1}`. Each observation gives two independent equations, so two views give four equations for the homogeneous point, solved by SVD.
+
+```python
+from astra_geometry.triangulation import triangulate
+
+points = triangulate(pixels1, pixels2, K1, K2, T_2_from_1)   # (N,2), (N,2) -> (N,3)
+```
+
+The result is defined only up to a scale whose **sign is meaningful**: the third coordinate is the depth along the optical axis, which is exactly what the cheirality test consumes. If the two rays are (nearly) parallel the point lies (nearly) at infinity; that case is **rejected** rather than returning an unbounded depth.
+
+### Epipolar geometry — 2D → 2D
+
+Given correspondences between two **calibrated** views, estimate the essential matrix and recover the relative pose. With `x_i` the normalized image coordinates (`x̂ = K⁻¹ [u, v, 1]ᵀ`) and `(R, t) = T_{2←1}`:
+
+$$x_2^\mathsf{T} E\,x_1 = 0, \qquad E = [t]_\times R$$
+
+> [!WARNING]
+> The convention is normative (conventions.md 6.2) and **cannot be detected by a round-trip test**: `[t]_× R` and `R [t]_×` satisfy superficially similar constraints but belong to opposite pairings. Implementations must follow the stated definition.
+
+```python
+from astra_geometry.essential import estimate_relative_pose
+
+R, t_hat = estimate_relative_pose(pixels1, pixels2, K1, K2)   # unit direction of t
+```
+
+Estimation uses the **normalized 8-point** algorithm (Hartley normalization, then projection onto the essential manifold: rank 2 with equal non-zero singular values). The decomposition of `E` yields four candidate poses; `decompose_essential_matrix` exposes all four and `select_candidate` picks the physically valid one by **cheirality** (positive depth in both cameras). The candidate list is a **set** — because the two non-zero singular values are equal, its ordering is not stable and must not be relied upon.
+
+**Limits, collected in one place.**
+
+- `E` is defined up to scale, so **only the direction of `t` is observable**; the metric baseline requires additional information. `estimate_relative_pose` therefore returns a **unit** `t̂`.
+- The **fundamental matrix** (unknown intrinsics) is out of scope. The relation `F = K₂⁻ᵀ E K₁⁻¹` is documented for reference only.
+- Only 2D-2D (epipolar) and 3D-3D (Kabsch) are covered. **PnP (3D-2D)** is a non-linear problem and is **not** implemented.
+- Degenerate two-view configurations — pure rotation (`t ≈ 0`), planar scenes for a point-based estimator, collinear correspondences, negligible parallax — are rejected or reported.
+
 ## Project roadmap
 
 - [x] Establish coordinate-frame and transformation conventions.
@@ -226,6 +282,8 @@ Consequently the reprojection residual in `camera.py` is not what Kabsch minimis
 - [x] Implement SE(3) transformations. *Validation, construction, composition, inversion and application to points are done. The last row of a homogeneous matrix is required to be exactly [0, 0, 0, 1]: it is structure, not an approximated geometric property, and carries no tolerance.*
 - [x] Implement pinhole camera projection. *Intrinsics, extrinsics as SE(3), projection, back-projection with depth, and a reprojection residual. Lens distortion is out of scope (not in conventions.md section 6).*
 - [x] Implement rigid transformation estimation using SVD. *Kabsch for 3D-3D correspondences. No scale estimation and no outlier handling (no RANSAC); degenerate (collinear) configurations are rejected.*
+- [x] Implement triangulation from two views. *Linear DLT; degeneracy (point at infinity, no parallax) is rejected.*
+- [x] Implement epipolar geometry. *Essential matrix for the calibrated case: normalized 8-point estimation, decomposition into the four pose candidates, and selection by cheirality. The fundamental matrix and the 5-point minimal solver are out of scope.*
 - [ ] Extend numerical validation and reference comparisons. *Validation predicates and explicit tolerance handling are in place.*
 - [ ] Develop a reproducible 3D visualization example.
 - [ ] Benchmark selected operations and investigate real-time constraints.
