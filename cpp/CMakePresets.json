@@ -1,0 +1,79 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "release-gcc",
+      "inherits": "base",
+      "displayName": "Release / GCC",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "debug-gcc",
+      "inherits": "base",
+      "displayName": "Debug / GCC",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "release-clang",
+      "inherits": "base",
+      "displayName": "Release / Clang",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Release",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "debug-clang",
+      "inherits": "base",
+      "displayName": "Debug / Clang",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "release-gcc", "configurePreset": "release-gcc" },
+    { "name": "debug-gcc", "configurePreset": "debug-gcc" },
+    { "name": "release-clang", "configurePreset": "release-clang" },
+    { "name": "debug-clang", "configurePreset": "debug-clang" }
+  ],
+  "testPresets": [
+    {
+      "name": "release-gcc",
+      "configurePreset": "release-gcc",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "debug-gcc",
+      "configurePreset": "debug-gcc",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "release-clang",
+      "configurePreset": "release-clang",
+      "output": { "outputOnFailure": true }
+    },
+    {
+      "name": "debug-clang",
+      "configurePreset": "debug-clang",
+      "output": { "outputOnFailure": true }
+    }
+  ]
+}
